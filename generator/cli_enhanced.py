@@ -33,7 +33,7 @@ console = Console()
 
 class CLIContext:
     """CLI context object."""
-    
+
     def __init__(self):
         self.settings = Settings()
         self.engine = get_engine(self.settings)
@@ -59,7 +59,7 @@ def cli(ctx, verbose, quiet, config):
     ctx.ensure_object(CLIContext)
     ctx.obj.verbose = verbose
     ctx.obj.quiet = quiet
-    
+
     if config:
         # Load custom configuration
         config_path = Path(config)
@@ -71,7 +71,7 @@ def cli(ctx, verbose, quiet, config):
                 else:
                     with open(config_path) as f:
                         config_data = json.load(f)
-                
+
                 ctx.obj.settings.update(config_data)
                 if not quiet:
                     console.print(f"[green]Loaded configuration from {config}[/green]")
@@ -92,60 +92,160 @@ def cli(ctx, verbose, quiet, config):
 @click.pass_context
 def generate(ctx, schema_file, output, force, dry_run, generators, exclude, parallel, continue_on_error):
     """Generate Django project from schema file."""
+    # Immediate debug output
+    console.print(f"[yellow]Debug: Verbose mode = {ctx.obj.verbose}[/yellow]")
+    console.print(f"[yellow]Debug: Schema file = {schema_file}[/yellow]")
+    console.print(f"[yellow]Debug: Output dir = {output}[/yellow]")
     if not ctx.obj.quiet:
         console.print(Panel.fit(
             "[bold blue]Django Enhanced Generator[/bold blue]\n"
             "Generating production-ready Django code...",
             border_style="blue"
         ))
-    
+
     try:
         # Load schema
         schema = _load_schema_file(schema_file)
-        
+        console.print(f"[yellow]Debug: Schema loaded successfully[/yellow]")
+        console.print(f"[yellow]Debug: Engine = {ctx.obj.engine}[/yellow]")
+        console.print(f"[yellow]Debug: Registry = {ctx.obj.registry}[/yellow]")
+
         # Validate schema
+        console.print(f"[yellow]Debug: About to validate schema, verbose={ctx.obj.verbose}[/yellow]")
         if ctx.obj.verbose:
             console.print("[cyan]Validating schema...[/cyan]")
-        
-        validation_result = ctx.obj.engine.validate_schema(schema)
+
+        try:
+            validation_result = ctx.obj.engine.validate_schema(schema)
+            console.print(f"[yellow]Debug: Validation result = {validation_result}[/yellow]")
+        except Exception as e:
+            console.print(f"[red]Validation exception: {e}[/red]")
+            console.print_exception()
+            sys.exit(1)
+
         if not validation_result['valid']:
             console.print("[red]Schema validation failed:[/red]")
             for error in validation_result['errors']:
                 console.print(f"  • {error}")
             sys.exit(1)
-        
+
         # Get generation plan
+        console.print(f"[yellow]Debug: About to get generation plan[/yellow]")
+        if ctx.obj.verbose:
+            console.print("[cyan]Getting generation plan...[/cyan]")
+
         selected_generators = list(generators) if generators else None
+        console.print(f"[yellow]Debug: Selected generators = {selected_generators}[/yellow]")
+
         if exclude:
             # Remove excluded generators
-            all_generators = [g.name for g in ctx.obj.registry.get_generators_for_schema(schema)]
-            selected_generators = [g for g in all_generators if g not in exclude]
-        
-        plan = ctx.obj.engine.get_generation_plan(schema, selected_generators)
-        
+            try:
+                all_generators = [g.name for g in ctx.obj.registry.get_generators_for_schema(schema)]
+                console.print(f"[yellow]Debug: All generators = {all_generators}[/yellow]")
+                selected_generators = [g for g in all_generators if g not in exclude]
+            except Exception as e:
+                console.print(f"[red]Error getting generators: {e}[/red]")
+                console.print_exception()
+
+        try:
+            console.print(f"[yellow]Debug: Calling get_generation_plan...[/yellow]")
+            plan = ctx.obj.engine.get_generation_plan(schema, selected_generators)
+            console.print(f"[yellow]Debug: Plan = {plan}[/yellow]")
+            if ctx.obj.verbose:
+                console.print(f"[cyan]Plan created: {plan.get('valid', False)}[/cyan]")
+        except Exception as e:
+            console.print(f"[red]Failed to create generation plan: {e}[/red]")
+            if ctx.obj.verbose:
+                console.print_exception()
+            sys.exit(1)
+
+        # Debug: Check available generators
+        console.print(f"[yellow]Debug: Checking available generators in registry...[/yellow]")
+
+        # NEW DEBUG CODE STARTS HERE
+        console.print(f"[yellow]Debug: Registry type: {type(ctx.obj.registry)}[/yellow]")
+        console.print(f"[yellow]Debug: Registry has _generators attribute: {hasattr(ctx.obj.registry, '_generators')}[/yellow]")
+
+        # Try to manually check if generators are imported
+        try:
+            from .generators import ModelGenerator, SerializerGenerator
+            console.print(f"[yellow]Debug: Can import ModelGenerator: {ModelGenerator is not None}[/yellow]")
+            console.print(f"[yellow]Debug: ModelGenerator name: {getattr(ModelGenerator, 'name', 'NO NAME')}[/yellow]")
+        except Exception as e:
+            console.print(f"[red]Debug: Failed to import generators: {e}[/red]")
+
+        # Check if generators are being auto-discovered
+        if hasattr(ctx.obj.registry, 'discover_generators'):
+            console.print(f"[yellow]Debug: Registry has discover_generators method[/yellow]")
+            try:
+                ctx.obj.registry.discover_generators()
+                # Force manual registration to test
+                try:
+                    from .generators import ModelGenerator, SerializerGenerator, ViewGenerator, ProjectStructureGenerator
+
+                    # Check if registry has a register method
+                    if hasattr(ctx.obj.registry, 'register'):
+                        console.print(f"[yellow]Debug: Manually registering generators...[/yellow]")
+                        ctx.obj.registry.register(ModelGenerator)
+                        ctx.obj.registry.register(SerializerGenerator)
+                        ctx.obj.registry.register(ViewGenerator)
+                        ctx.obj.registry.register(ProjectStructureGenerator)
+                        console.print(f"[yellow]Debug: After manual registration, generators: {len(ctx.obj.registry.generators)}[/yellow]")
+                    else:
+                        console.print(f"[red]Debug: Registry has no 'register' method[/red]")
+                        # Try direct assignment
+                        ctx.obj.registry.generators['ModelGenerator'] = ModelGenerator
+                        ctx.obj.registry.generators['SerializerGenerator'] = SerializerGenerator
+                        ctx.obj.registry.generators['ViewGenerator'] = ViewGenerator
+                        ctx.obj.registry.generators['ProjectStructureGenerator'] = ProjectStructureGenerator
+                        console.print(f"[yellow]Debug: After direct assignment, generators: {len(ctx.obj.registry.generators)}[/yellow]")
+                except Exception as e:
+                    console.print(f"[red]Debug: Manual registration failed: {e}[/red]")
+                    import traceback
+                    console.print(f"[red]{traceback.format_exc()}[/red]")
+            except Exception as e:
+                console.print(f"[red]Debug: discover_generators failed: {e}[/red]")
+        # NEW DEBUG CODE ENDS HERE
+
+        try:
+            all_gens = ctx.obj.registry.list_generators()
+            console.print(f"[yellow]Debug: Total generators available: {len(all_gens)}[/yellow]")
+            for gen in all_gens:
+                console.print(f"[yellow]  - {gen}[/yellow]")
+        except Exception as e:
+            console.print(f"[red]Error listing generators: {e}[/red]")
+
+        # Also check if generators are being filtered out
+        try:
+            schema_gens = ctx.obj.registry.get_generators_for_schema(schema)
+            console.print(f"[yellow]Debug: Generators for this schema: {len(list(schema_gens))}[/yellow]")
+        except Exception as e:
+            console.print(f"[red]Error getting schema generators: {e}[/red]")
+
         if not plan['valid']:
             console.print(f"[red]Generation plan failed: {plan['error']}[/red]")
             sys.exit(1)
-        
+
         # Show generation plan
         if ctx.obj.verbose or dry_run:
             _show_generation_plan(plan)
-        
+
         if dry_run:
             console.print("\n[yellow]Dry run mode - no files will be created[/yellow]")
             return
-        
+
         # Confirm generation if output directory is not empty
         if not force and Path(output).exists() and any(Path(output).iterdir()):
             if not Confirm.ask(f"Output directory '{output}' is not empty. Continue?"):
                 console.print("[red]Generation cancelled[/red]")
                 return
-        
+
         # Configure engine
         ctx.obj.engine.parallel_execution = parallel
         ctx.obj.engine.continue_on_error = continue_on_error
-        
+
         # Add progress callback
+        progress_bar = None
         if not ctx.obj.quiet:
             progress_bar = Progress(
                 SpinnerColumn(),
@@ -155,7 +255,7 @@ def generate(ctx, schema_file, output, force, dry_run, generators, exclude, para
                 TimeElapsedColumn(),
                 console=console
             )
-            
+
             def progress_callback(data):
                 if hasattr(progress_callback, 'task_id'):
                     progress_bar.update(
@@ -164,31 +264,42 @@ def generate(ctx, schema_file, output, force, dry_run, generators, exclude, para
                         completed=data['current'],
                         total=data['total']
                     )
-            
+
             ctx.obj.engine.add_progress_callback(progress_callback)
-        
+
         # Generate code
-        with progress_bar if not ctx.obj.quiet else console.status("Generating..."):
-            if not ctx.obj.quiet:
-                progress_callback.task_id = progress_bar.add_task(
-                    "Starting generation...", 
-                    total=len(plan['generators'])
+        result = None
+        try:
+            with progress_bar if progress_bar else console.status("Generating..."):
+                if progress_bar:
+                    progress_callback.task_id = progress_bar.add_task(
+                        "Starting generation...",
+                        total=len(plan['generators'])
+                    )
+
+                result = ctx.obj.engine.generate(
+                    schema=schema,
+                    output_dir=output,
+                    force=force,
+                    dry_run=dry_run,
+                    selected_generators=selected_generators
                 )
-            
-            result = ctx.obj.engine.generate(
-                schema=schema,
-                output_dir=output,
-                force=force,
-                dry_run=dry_run,
-                selected_generators=selected_generators
-            )
-        
+        except Exception as e:
+            # Catch any exceptions during generation
+            result = {
+                'success': False,
+                'errors': [f"Generation engine error: {str(e)}"],
+                'execution_time': 0
+            }
+            if ctx.obj.verbose:
+                console.print_exception()
+
         # Show results
-        _show_generation_results(result, ctx.obj.verbose)
-        
-        if not result['success']:
+        _show_generation_results(result or {'success': False, 'errors': ['Unknown error occurred'], 'execution_time': 0}, ctx.obj.verbose)
+
+        if not result or not result.get('success', False):
             sys.exit(1)
-            
+
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         if ctx.obj.verbose:
@@ -206,23 +317,23 @@ def validate(ctx, schema_file, strict, show_warnings, output_format):
     """Validate schema file for errors and warnings."""
     try:
         schema = _load_schema_file(schema_file)
-        
+
         # Create parser with strict mode
         parser = SchemaParser(ctx.obj.settings, strict_mode=strict)
-        
+
         with console.status("Validating schema..."):
             validation_result = parser.validate(schema, return_warnings=True)
-        
+
         if output_format == 'table':
             _show_validation_results_table(validation_result, show_warnings)
         elif output_format == 'json':
             console.print_json(json.dumps(validation_result, indent=2))
         else:  # yaml
             console.print(yaml.dump(validation_result, default_flow_style=False))
-        
+
         if not validation_result['valid']:
             sys.exit(1)
-            
+
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         sys.exit(1)
@@ -236,7 +347,7 @@ def validate(ctx, schema_file, strict, show_warnings, output_format):
 def list_generators(ctx, category, tag, output_format):
     """List available generators."""
     generators = ctx.obj.registry.list_generators(category=category, tag=tag)
-    
+
     if output_format == 'table':
         _show_generators_table(generators)
     elif output_format == 'json':
@@ -251,11 +362,11 @@ def list_generators(ctx, category, tag, output_format):
 def generator_info(ctx, generator_name):
     """Show detailed information about a generator."""
     info = ctx.obj.registry.get_generator_info(generator_name)
-    
+
     if not info:
         console.print(f"[red]Generator '{generator_name}' not found[/red]")
         sys.exit(1)
-    
+
     _show_generator_info(info)
 
 
@@ -265,7 +376,7 @@ def generator_info(ctx, generator_name):
 def list_plugins(ctx, output_format):
     """List available plugins."""
     plugins = ctx.obj.plugin_manager.list_plugins()
-    
+
     if output_format == 'table':
         _show_plugins_table(plugins)
     elif output_format == 'json':
@@ -291,7 +402,7 @@ def load_plugin(ctx, plugin_name, config):
         except Exception as e:
             console.print(f"[red]Failed to load plugin config: {e}[/red]")
             sys.exit(1)
-    
+
     if ctx.obj.plugin_manager.load_plugin(plugin_name, plugin_config):
         console.print(f"[green]Plugin '{plugin_name}' loaded successfully[/green]")
     else:
@@ -311,14 +422,14 @@ def create_example(ctx, format, type, output):
         'standard': _get_standard_example(),
         'full': _get_full_example()
     }
-    
+
     example_data = examples[type]
-    
+
     if format == 'json':
         content = json.dumps(example_data, indent=2)
     else:
         content = yaml.dump(example_data, default_flow_style=False, sort_keys=False)
-    
+
     if output:
         Path(output).write_text(content)
         console.print(f"[green]Example schema written to: {output}[/green]")
@@ -344,7 +455,7 @@ def analyze(ctx, project_path, output_format, include_performance, include_secur
         f"Analyzing: {project_path}",
         border_style="blue"
     ))
-    
+
     # This would integrate with a project analyzer
     console.print("[yellow]Project analysis feature coming soon![/yellow]")
 
@@ -358,29 +469,29 @@ def interactive(ctx):
         "Let's build your Django project schema step by step.",
         border_style="blue"
     ))
-    
+
     schema = _interactive_schema_builder()
-    
+
     # Ask if user wants to save the schema
     if Confirm.ask("Save schema to file?"):
         filename = Prompt.ask("Enter filename", default="schema.yml")
-        
+
         content = yaml.dump(schema, default_flow_style=False, sort_keys=False)
         Path(filename).write_text(content)
-        
+
         console.print(f"[green]Schema saved to {filename}[/green]")
-        
+
         # Ask if user wants to generate immediately
         if Confirm.ask("Generate project now?"):
             output_dir = Prompt.ask("Output directory", default=".")
-            
+
             result = ctx.obj.engine.generate(
                 schema=schema,
                 output_dir=output_dir,
                 force=False,
                 dry_run=False
             )
-            
+
             _show_generation_results(result, ctx.obj.verbose)
 
 
@@ -393,7 +504,7 @@ def doctor(ctx):
         "Checking Django Enhanced Generator installation...",
         border_style="blue"
     ))
-    
+
     checks = [
         ("Python Version", _check_python_version),
         ("Dependencies", _check_dependencies),
@@ -401,42 +512,51 @@ def doctor(ctx):
         ("Plugin System", _check_plugins),
         ("Configuration", _check_configuration),
     ]
-    
+
     results = []
-    
+
     with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
     ) as progress:
         task = progress.add_task("Running health checks...", total=len(checks))
-        
+
         for check_name, check_func in checks:
             progress.update(task, description=f"Checking {check_name}...")
             result = check_func(ctx)
             results.append((check_name, result))
             progress.advance(task)
-    
+
     _show_health_check_results(results)
 
 
 # Helper functions
 
+# file: generator/cli_enhanced.py
 def _load_schema_file(path: str) -> dict:
     """Load schema from YAML or JSON file."""
     path_obj = Path(path)
     content = path_obj.read_text()
-    
+
     if path_obj.suffix in ['.yaml', '.yml']:
-        return yaml.safe_load(content)
+        schema = yaml.safe_load(content)
     elif path_obj.suffix == '.json':
-        return json.loads(content)
+        schema = json.loads(content)
     else:
         # Try to parse as YAML first, then JSON
         try:
-            return yaml.safe_load(content)
+            schema = yaml.safe_load(content)
         except yaml.YAMLError:
-            return json.loads(content)
+            schema = json.loads(content)
+
+    # --- ADD THESE LINES ---
+    print(f"DEBUG: Loaded schema type: {type(schema)}")
+    print(f"DEBUG: Loaded schema content (first 200 chars): {str(schema)[:200]}")
+    # --- END ADDED LINES ---
+
+    return schema
+
 
 
 def _show_generation_plan(plan: Dict[str, Any]) -> None:
@@ -446,7 +566,7 @@ def _show_generation_plan(plan: Dict[str, Any]) -> None:
     table.add_column("Generator", style="green")
     table.add_column("Description", style="white")
     table.add_column("Dependencies", style="yellow")
-    
+
     for i, generator in enumerate(plan['generators'], 1):
         deps = ', '.join(generator['requires']) if generator['requires'] else 'None'
         table.add_row(
@@ -455,45 +575,62 @@ def _show_generation_plan(plan: Dict[str, Any]) -> None:
             generator['description'][:50] + '...' if len(generator['description']) > 50 else generator['description'],
             deps
         )
-    
+
     console.print(table)
     console.print(f"\n[cyan]Estimated files to generate: {plan['estimated_files']}[/cyan]")
 
 
 def _show_generation_results(result: Dict[str, Any], verbose: bool) -> None:
     """Display generation results."""
-    if result['success']:
+    if not result:
+        console.print("[red]No result returned from generation engine[/red]")
+        return
+
+    if result.get('success', False):
         console.print(Panel(
             f"[bold green]✓ Generation completed successfully![/bold green]\n\n"
-            f"Files generated: {result['stats']['files_generated']}\n"
-            f"Generators executed: {result['stats']['generators_executed']}\n"
-            f"Execution time: {result['execution_time']:.2f}s",
+            f"Files generated: {result.get('stats', {}).get('files_generated', 0)}\n"
+            f"Generators executed: {result.get('stats', {}).get('generators_executed', 0)}\n"
+            f"Execution time: {result.get('execution_time', 0):.2f}s",
             title="Success",
             border_style="green"
         ))
-        
-        if verbose and result['generated_files']:
+
+        if verbose and result.get('generated_files'):
             console.print("\n[cyan]Generated files:[/cyan]")
             for file_path in result['generated_files'][:20]:  # Show first 20
                 console.print(f"  • {file_path}")
-            
+
             if len(result['generated_files']) > 20:
                 console.print(f"  ... and {len(result['generated_files']) - 20} more files")
-    
+
     else:
+        execution_time = result.get('execution_time', 0)
         console.print(Panel(
             f"[bold red]✗ Generation failed![/bold red]\n\n"
-            f"Execution time: {result['execution_time']:.2f}s",
+            f"Execution time: {execution_time:.2f}s",
             title="Failed",
             border_style="red"
         ))
-    
+
     # Show warnings
     if result.get('warnings'):
         console.print("\n[yellow]Warnings:[/yellow]")
         for warning in result['warnings']:
             console.print(f"  • {warning}")
-    
+
+    # Show errors
+    if result.get('errors'):
+        console.print("\n[red]Errors:[/red]")
+        for error in result['errors']:
+            console.print(f"  • {error}")
+
+    # Show warnings
+    if result.get('warnings'):
+        console.print("\n[yellow]Warnings:[/yellow]")
+        for warning in result['warnings']:
+            console.print(f"  • {warning}")
+
     # Show errors
     if result.get('errors'):
         console.print("\n[red]Errors:[/red]")
@@ -507,12 +644,12 @@ def _show_validation_results_table(result: Dict[str, Any], show_warnings: bool) 
         console.print("[bold green]✓ Schema is valid![/bold green]")
     else:
         console.print("[bold red]✗ Schema validation failed![/bold red]")
-    
+
     if result.get('errors'):
         console.print("\n[red]Errors:[/red]")
         for error in result['errors']:
             console.print(f"  • {error}")
-    
+
     if show_warnings and result.get('warnings'):
         console.print("\n[yellow]Warnings:[/yellow]")
         for warning in result['warnings']:
@@ -527,7 +664,7 @@ def _show_generators_table(generators: List[Dict[str, Any]]) -> None:
     table.add_column("Description", style="white")
     table.add_column("Order", style="yellow", width=6)
     table.add_column("Status", style="magenta")
-    
+
     for generator in generators:
         status = "✓ Loaded" if generator['loaded'] else "○ Available"
         table.add_row(
@@ -537,7 +674,7 @@ def _show_generators_table(generators: List[Dict[str, Any]]) -> None:
             str(generator['order']),
             status
         )
-    
+
     console.print(table)
 
 
@@ -556,12 +693,12 @@ def _show_generator_info(info: Dict[str, Any]) -> None:
         title="Generator Information",
         border_style="blue"
     ))
-    
+
     if info['dependencies']:
         console.print("\n[cyan]Dependencies:[/cyan]")
         for dep in info['dependencies']:
             console.print(f"  • {dep}")
-    
+
     if info['dependents']:
         console.print("\n[cyan]Dependents:[/cyan]")
         for dep in info['dependents']:
@@ -576,7 +713,7 @@ def _show_plugins_table(plugins: List[Dict[str, Any]]) -> None:
     table.add_column("Description", style="white")
     table.add_column("Author", style="yellow")
     table.add_column("Status", style="magenta")
-    
+
     for plugin in plugins:
         status = "✓ Loaded" if plugin['loaded'] else "○ Available"
         table.add_row(
@@ -586,7 +723,7 @@ def _show_plugins_table(plugins: List[Dict[str, Any]]) -> None:
             plugin['author'],
             status
         )
-    
+
     console.print(table)
 
 
@@ -597,27 +734,27 @@ def _interactive_schema_builder() -> Dict[str, Any]:
         'features': {},
         'apps': []
     }
-    
+
     # Project information
     console.print("\n[bold cyan]Project Information[/bold cyan]")
     schema['project']['name'] = Prompt.ask("Project name")
     schema['project']['description'] = Prompt.ask("Project description", default="")
     schema['project']['python_version'] = Prompt.ask("Python version", default="3.11")
     schema['project']['django_version'] = Prompt.ask("Django version", default="4.2")
-    
+
     # Features
     console.print("\n[bold cyan]Features[/bold cyan]")
-    
+
     # API features
     if Confirm.ask("Enable REST API?"):
         schema['features']['api'] = {'rest_framework': True}
-        
+
         if Confirm.ask("Enable GraphQL?"):
             schema['features']['api']['graphql'] = True
-        
+
         if Confirm.ask("Enable WebSockets?"):
             schema['features']['api']['websockets'] = True
-    
+
     # Database features
     db_engine = Prompt.ask(
         "Database engine",
@@ -625,7 +762,7 @@ def _interactive_schema_builder() -> Dict[str, Any]:
         default='postgresql'
     )
     schema['features']['database'] = {'engine': db_engine}
-    
+
     # Performance features
     if Confirm.ask("Enable caching?"):
         cache_backend = Prompt.ask(
@@ -634,72 +771,72 @@ def _interactive_schema_builder() -> Dict[str, Any]:
             default='redis'
         )
         schema['features']['performance'] = {'caching': {'backend': cache_backend}}
-        
+
         if Confirm.ask("Enable Celery for async tasks?"):
             schema['features']['performance']['celery'] = True
-    
+
     # Deployment features
     if Confirm.ask("Enable Docker?"):
         schema['features']['deployment'] = {'docker': True}
-        
+
         if Confirm.ask("Enable Kubernetes?"):
             schema['features']['deployment']['kubernetes'] = True
-    
+
     # Apps
     console.print("\n[bold cyan]Applications[/bold cyan]")
-    
+
     while True:
         app_name = Prompt.ask("App name (or 'done' to finish)")
         if app_name.lower() == 'done':
             break
-        
+
         app = {
             'name': app_name,
             'models': []
         }
-        
+
         # Models for this app
         while True:
             model_name = Prompt.ask(f"Model name for {app_name} (or 'done' to finish)")
             if model_name.lower() == 'done':
                 break
-            
+
             model = {
                 'name': model_name,
                 'fields': []
             }
-            
+
             # Basic fields
             model['fields'].extend([
                 {'name': 'created_at', 'type': 'DateTimeField', 'auto_now_add': True},
                 {'name': 'updated_at', 'type': 'DateTimeField', 'auto_now': True}
             ])
-            
+
             # Custom fields
             while True:
                 field_name = Prompt.ask(f"Field name for {model_name} (or 'done' to finish)")
                 if field_name.lower() == 'done':
                     break
-                
+
                 field_type = Prompt.ask(
                     "Field type",
                     choices=['CharField', 'TextField', 'IntegerField', 'BooleanField', 'DateTimeField', 'ForeignKey'],
                     default='CharField'
                 )
-                
+
                 field = {'name': field_name, 'type': field_type}
-                
+
                 if field_type == 'CharField':
                     field['max_length'] = int(Prompt.ask("Max length", default="200"))
                 elif field_type == 'ForeignKey':
                     field['to'] = Prompt.ask("Related model")
-                
+
                 model['fields'].append(field)
-            
+
             app['models'].append(model)
-        
+
         schema['apps'].append(app)
-    
+
     return schema
 
 
@@ -707,7 +844,7 @@ def _check_python_version(ctx) -> Dict[str, Any]:
     """Check Python version."""
     import sys
     version = sys.version_info
-    
+
     if version >= (3, 9):
         return {'status': 'ok', 'message': f'Python {version.major}.{version.minor}.{version.micro}'}
     else:
@@ -718,13 +855,13 @@ def _check_dependencies(ctx) -> Dict[str, Any]:
     """Check required dependencies."""
     required_packages = ['django', 'jinja2', 'pyyaml', 'click', 'rich']
     missing = []
-    
+
     for package in required_packages:
         try:
             __import__(package)
         except ImportError:
             missing.append(package)
-    
+
     if missing:
         return {'status': 'error', 'message': f'Missing packages: {", ".join(missing)}'}
     else:
@@ -734,12 +871,12 @@ def _check_dependencies(ctx) -> Dict[str, Any]:
 def _check_templates(ctx) -> Dict[str, Any]:
     """Check template files."""
     template_dir = Path(__file__).parent / 'templates'
-    
+
     if not template_dir.exists():
         return {'status': 'error', 'message': 'Template directory not found'}
-    
+
     template_count = len(list(template_dir.rglob('*.j2')))
-    
+
     if template_count > 0:
         return {'status': 'ok', 'message': f'{template_count} templates found'}
     else:
@@ -770,7 +907,7 @@ def _show_health_check_results(results: List[tuple]) -> None:
     table.add_column("Check", style="cyan")
     table.add_column("Status", style="white")
     table.add_column("Message", style="white")
-    
+
     for check_name, result in results:
         status = result['status']
         if status == 'ok':
@@ -779,9 +916,9 @@ def _show_health_check_results(results: List[tuple]) -> None:
             status_display = "[yellow]⚠ Warning[/yellow]"
         else:
             status_display = "[red]✗ Error[/red]"
-        
+
         table.add_row(check_name, status_display, result['message'])
-    
+
     console.print(table)
 
 
