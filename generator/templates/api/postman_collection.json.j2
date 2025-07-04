@@ -1,0 +1,549 @@
+{
+  "info": {
+    "_postman_id": "{{ project.name|lower }}-api-{{ now().strftime('%Y%m%d') }}",
+    "name": "{{ project.name }} API",
+    "description": "{{ project.description|default('API collection for ' + project.name) }}",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "django-enhanced-generator"
+  },
+  "auth": {
+    {% if features.authentication.jwt %}
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+    {% elif features.authentication.token %}
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "value",
+        "value": "Token {{api_token}}",
+        "type": "string"
+      },
+      {
+        "key": "key",
+        "value": "Authorization",
+        "type": "string"
+      }
+    ]
+    {% else %}
+    "type": "noauth"
+    {% endif %}
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Set default headers",
+          "pm.request.headers.add({",
+          "    key: 'Content-Type',",
+          "    value: 'application/json'",
+          "});",
+          "",
+          "// Set base URL if not already set",
+          "if (!pm.environment.get('base_url')) {",
+          "    pm.environment.set('base_url', '{{ project.api_base_url|default("http://localhost:8000") }}');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Log response time",
+          "console.log('Response time: ' + pm.response.responseTime + 'ms');",
+          "",
+          "// Check for common errors",
+          "if (pm.response.code >= 400) {",
+          "    console.error('Request failed with status: ' + pm.response.code);",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "{{ project.api_base_url|default('http://localhost:8000') }}",
+      "type": "string"
+    },
+    {
+      "key": "api_version",
+      "value": "v1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {% if features.authentication %}
+    {
+      "name": "Authentication",
+      "item": [
+        {% if features.authentication.jwt %}
+        {
+          "name": "Obtain Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('access_token', response.access);",
+                  "    pm.environment.set('refresh_token', response.refresh);",
+                  "    console.log('Tokens saved to environment');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"{{username}}\",\n    \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/token/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "token"]
+            },
+            "description": "Obtain JWT access and refresh tokens"
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const response = pm.response.json();",
+                  "    pm.environment.set('access_token', response.access);",
+                  "    console.log('Access token refreshed');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"refresh\": \"{{refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/token/refresh/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "token", "refresh"]
+            },
+            "description": "Refresh JWT access token"
+          }
+        },
+        {
+          "name": "Verify Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\": \"{{access_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/token/verify/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "token", "verify"]
+            },
+            "description": "Verify JWT token validity"
+          }
+        },
+        {% endif %}
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"newuser\",\n    \"email\": \"newuser@example.com\",\n    \"password\": \"securepassword123\",\n    \"password2\": \"securepassword123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/auth/register/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "register"]
+            },
+            "description": "Register a new user account"
+          }
+        }
+      ]
+    },
+    {% endif %}
+    {% for app in apps %}
+    {% if app.models %}
+    {
+      "name": "{{ app.name|title }}",
+      "item": [
+        {% for model in app.models %}
+        {% if model.api and model.api.viewset != false %}
+        {
+          "name": "{{ model.name }}",
+          "item": [
+            {
+              "name": "List {{ model.name }}s",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Response is JSON', function () {",
+                      "    pm.response.to.be.json;",
+                      "});",
+                      "",
+                      "pm.test('Response has required fields', function () {",
+                      "    const response = pm.response.json();",
+                      "    pm.expect(response).to.have.property('results');",
+                      "    pm.expect(response).to.have.property('count');",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/{{ model.name.lower() }}s/{% if model.api.filterset_fields %}?page=1&page_size=20{% endif %}",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "{{ model.name.lower() }}s"],
+                  "query": [
+                    {% if model.api.filterset_fields %}
+                    {% for field in model.api.filterset_fields %}
+                    {
+                      "key": "{{ field }}",
+                      "value": "",
+                      "disabled": true,
+                      "description": "Filter by {{ field }}"
+                    },
+                    {% endfor %}
+                    {% endif %}
+                    {% if model.api.search_fields %}
+                    {
+                      "key": "search",
+                      "value": "",
+                      "disabled": true,
+                      "description": "Search in fields"
+                    },
+                    {% endif %}
+                    {% if model.api.ordering_fields %}
+                    {
+                      "key": "ordering",
+                      "value": "{{ model.api.ordering_fields[0] }}",
+                      "disabled": true,
+                      "description": "Order by field"
+                    },
+                    {% endif %}
+                    {
+                      "key": "page",
+                      "value": "1",
+                      "description": "Page number"
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "20",
+                      "description": "Items per page"
+                    }
+                  ]
+                },
+                "description": "Get a paginated list of {{ model.name.lower() }}s"
+              }
+            },
+            {
+              "name": "Create {{ model.name }}",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test('Status code is 201', function () {",
+                      "    pm.response.to.have.status(201);",
+                      "});",
+                      "",
+                      "pm.test('Response has ID', function () {",
+                      "    const response = pm.response.json();",
+                      "    pm.expect(response).to.have.property('id');",
+                      "    pm.environment.set('last_{{ model.name.lower() }}_id', response.id);",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n{% for field in model.fields %}{% if not field.auto_now and not field.auto_now_add and field.name not in ['id', 'created_at', 'updated_at', 'created_by', 'updated_by'] %}    \"{{ field.name }}\": {% if field.type == 'CharField' or field.type == 'TextField' %}\"sample {{ field.name }}\"{% elif field.type == 'IntegerField' %}0{% elif field.type == 'BooleanField' %}false{% elif field.type == 'DateField' %}\"{{ now().strftime('%Y-%m-%d') }}\"{% elif field.type == 'DateTimeField' %}\"{{ now().strftime('%Y-%m-%dT%H:%M:%SZ') }}\"{% elif field.type == 'DecimalField' %}\"0.00\"{% elif field.type == 'JSONField' %}{}{% else %}null{% endif %}{% if not loop.last %},{% endif %}\n{% endif %}{% endfor %}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/{{ model.name.lower() }}s/",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "{{ model.name.lower() }}s"]
+                },
+                "description": "Create a new {{ model.name.lower() }}"
+              }
+            },
+            {
+              "name": "Get {{ model.name }}",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});",
+                      "",
+                      "pm.test('Response has correct ID', function () {",
+                      "    const response = pm.response.json();",
+                      "    pm.expect(response.id).to.eql(pm.variables.get('last_{{ model.name.lower() }}_id'));",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/{{ model.name.lower() }}s/{{ last_id_var }}/",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "{{ model.name.lower() }}s", "{{ last_id_var }}"]
+                },
+                "description": "Get a specific {{ model.name.lower() }} by ID"
+              }
+            },
+            {
+              "name": "Update {{ model.name }}",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n{% for field in model.fields %}{% if not field.auto_now and not field.auto_now_add and field.name not in ['id', 'created_at', 'updated_at', 'created_by', 'updated_by'] %}    \"{{ field.name }}\": {% if field.type == 'CharField' or field.type == 'TextField' %}\"updated {{ field.name }}\"{% elif field.type == 'IntegerField' %}1{% elif field.type == 'BooleanField' %}true{% elif field.type == 'DateField' %}\"{{ now().strftime('%Y-%m-%d') }}\"{% elif field.type == 'DateTimeField' %}\"{{ now().strftime('%Y-%m-%dT%H:%M:%SZ') }}\"{% elif field.type == 'DecimalField' %}\"1.00\"{% elif field.type == 'JSONField' %}{\"updated\": true}{% else %}null{% endif %}{% if not loop.last %},{% endif %}\n{% endif %}{% endfor %}}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/{{ model.name.lower() }}s/{{ last_id_var }}/",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "{{ model.name.lower() }}s", "{{ last_id_var }}"]
+                },
+                "description": "Update an existing {{ model.name.lower() }}"
+              }
+            },
+            {
+              "name": "Partial Update {{ model.name }}",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test('Status code is 200', function () {",
+                      "    pm.response.to.have.status(200);",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"{{ model.fields[0].name }}\": \"patched value\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/{{ model.name.lower() }}s/{{ last_id_var }}/",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "{{ model.name.lower() }}s", "{{ last_id_var }}"]
+                },
+                "description": "Partially update an existing {{ model.name.lower() }}"
+              }
+            },
+            {
+              "name": "Delete {{ model.name }}",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "pm.test('Status code is 204', function () {",
+                      "    pm.response.to.have.status(204);",
+                      "});"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/{{ model.name.lower() }}s/{{ last_id_var }}/",
+
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "{{ model.name.lower() }}s", "{{ last_id_var }}"]
+                },
+                "description": "Delete a {{ model.name.lower() }}"
+              }
+            }
+            {% if model.api.custom_actions %}
+            {% for action in model.api.custom_actions %}
+          ,{
+              "name": "{{ action.name|title }}",
+              "request": {
+                "method": "{{ action.methods[0] }}",
+                "header": [],
+                {% if action.methods[0] in ['POST', 'PUT', 'PATCH'] %}
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    // Add {{ action.name }} data here\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                {% endif %}
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/{{ model.name.lower() }}s/{% if action.detail %}{{ last_id_var }}/{% endif %}{{ action.name }}/",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "{{ model.name.lower() }}s", {% if action.detail %}"{{ last_id_var }}", {% endif %}"{{ action.name }}"]
+                },
+                "description": "{{ action.description|default('Custom action: ' + action.name) }}"
+              }
+            }
+            {% endfor %}
+            {% endif %}
+            {% if model.api.allow_bulk %}
+          ,{
+              "name": "Bulk Create {{ model.name }}s",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "[\n    {\n{% for field in model.fields %}{% if not field.auto_now and not field.auto_now_add and field.name not in ['id', 'created_at', 'updated_at'] %}        \"{{ field.name }}\": \"value1\"{% if not loop.last %},{% endif %}\n{% endif %}{% endfor %}    },\n    {\n{% for field in model.fields %}{% if not field.auto_now and not field.auto_now_add and field.name not in ['id', 'created_at', 'updated_at'] %}        \"{{ field.name }}\": \"value2\"{% if not loop.last %},{% endif %}\n{% endif %}{% endfor %}    }\n]",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/{{ model.name.lower() }}s/bulk_create/",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "{{ model.name.lower() }}s", "bulk_create"]
+                },
+                "description": "Create multiple {{ model.name.lower() }}s in one request"
+              }
+            },
+            {
+              "name": "Bulk Delete {{ model.name }}s",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n    \"ids\": [1, 2, 3]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/{{api_version}}/{{ model.name.lower() }}s/bulk_delete/",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "{{api_version}}", "{{ model.name.lower() }}s", "bulk_delete"]
+                },
+                "description": "Delete multiple {{ model.name.lower() }}s by IDs"
+              }
+            }
+            {% endif %}
+          ]
+        }{% if not loop.last %},{% endif %}
+        {% endif %}
+        {% endfor %}
+      ]
+    }{% if not loop.last %},{% endif %}
+    {% endif %}
+    {% endfor %}
+  ]
+}

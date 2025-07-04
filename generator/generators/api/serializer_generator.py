@@ -111,8 +111,11 @@ class SerializerGenerator(BaseGenerator):
             relationships['reverse'][model_name] = []
             relationships['many_to_many'][model_name] = []
 
-            # Check fields
-            for field in model.get('fields', []):
+            # Check fields - ensure fields exist
+            fields = model.get('fields')
+            if not fields:
+                continue
+            for field in fields:
                 field_type = field['type']
 
                 if field_type in ['ForeignKey', 'OneToOneField']:
@@ -185,7 +188,10 @@ class SerializerGenerator(BaseGenerator):
         """Check if nested serializers are needed."""
         for model in models:
             # Check if model has relationships
-            for field in model.get('fields', []):
+            fields = model.get('fields')
+            if not fields:
+                continue
+            for field in fields:
                 if field['type'] in ['ForeignKey', 'OneToOneField', 'ManyToManyField']:
                     return True
 
@@ -198,7 +204,10 @@ class SerializerGenerator(BaseGenerator):
     def _has_file_uploads(self, models: List[Dict[str, Any]]) -> bool:
         """Check if any model has file upload fields."""
         for model in models:
-            for field in model.get('fields', []):
+            fields = model.get('fields')
+            if not fields:
+                continue
+            for field in fields:
                 if field['type'] in ['FileField', 'ImageField']:
                     return True
         return False
@@ -221,7 +230,10 @@ class SerializerGenerator(BaseGenerator):
         """Check if custom serializer fields are needed."""
         for model in models:
             # Check for fields that need custom serialization
-            for field in model.get('fields', []):
+            fields = model.get('fields')
+            if not fields:
+                continue
+            for field in fields:
                 # JSON fields often need custom serialization
                 if field['type'] == 'JSONField':
                     return True
@@ -303,9 +315,10 @@ class SerializerGenerator(BaseGenerator):
             imports['rest_framework'].append('from rest_framework.fields import JSONField')
 
         # Validators
-        if self._needs_validators(schema):
-            imports['django'].append('from django.core.exceptions import ValidationError')
-            imports['rest_framework'].append('from rest_framework.validators import UniqueValidator')
+        # Note: _needs_validators expects app, not schema
+        # Skip validator check here since we don't have app context
+        imports['django'].append('from django.core.exceptions import ValidationError')
+        imports['rest_framework'].append('from rest_framework.validators import UniqueValidator')
 
         # Transactions
         imports['django'].append('from django.db import transaction')

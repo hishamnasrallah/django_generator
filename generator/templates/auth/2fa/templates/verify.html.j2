@@ -1,0 +1,92 @@
+{% raw %}{% extends "base.html" %}
+
+    {% block title %}{{ title|default:"Verify Two-Factor Authentication" }} - {{ project.name }}{% endblock %}
+
+    {% block content %}
+    <div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-md w-full space-y-8">
+            <div>
+                <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+                    Two-Factor Authentication
+                </h2>
+                <p class="mt-2 text-center text-sm text-gray-600">
+                    Enter your verification code to continue
+                </p>
+            </div>
+
+            <form class="mt-8 space-y-6" method="post">
+                {% csrf_token %}
+
+                <div>
+                    <label for="{{ form.otp_token.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                        Verification Code
+                    </label>
+                    <div class="mt-1">
+                        {{ form.otp_token }}
+                    </div>
+                    {% if form.otp_token.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.otp_token.errors.0 }}</p>
+                    {% endif %}
+                    <p class="mt-2 text-sm text-gray-500">
+                        Enter the code from your authenticator app or use a backup code
+                    </p>
+                </div>
+
+                {% if form.trust_device %}
+                <div class="flex items-center">
+                    {{ form.trust_device }}
+                    <label for="{{ form.trust_device.id_for_label }}" class="ml-2 block text-sm text-gray-900">
+                        {{ form.trust_device.label }}
+                    </label>
+                </div>
+                {% endif %}
+
+                <div>
+                    <button type="submit" class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Verify
+                    </button>
+                </div>
+
+                <div class="text-center space-y-2">
+                    <a href="#" class="text-sm text-indigo-600 hover:text-indigo-500" onclick="showBackupCodeForm()">
+                        Use a backup code
+                    </a>
+                    <br>
+                    <a href="{% url 'logout' %}" class="text-sm text-gray-600 hover:text-gray-500">
+                        Cancel and logout
+                    </a>
+                </div>
+            </form>
+
+            <!-- Backup code form (hidden by default) -->
+            <div id="backup-code-form" class="hidden mt-8">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Use Backup Code</h3>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="use_backup" value="true">
+                    <div>
+                        <label for="backup_code" class="block text-sm font-medium text-gray-700">
+                            Backup Code
+                        </label>
+                        <div class="mt-1">
+                            <input type="text" name="otp_token" id="backup_code"
+                                   class="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                   placeholder="Enter backup code">
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Verify with Backup Code
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showBackupCodeForm() {
+            document.getElementById('backup-code-form').classList.toggle('hidden');
+        }
+    </script>
+    {% endblock %}{% endraw %}

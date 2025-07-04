@@ -1,0 +1,137 @@
+{% raw %}{% extends "base.html" %}
+
+    {% block title %}{{ title|default:"Disable Two-Factor Authentication" }} - {{ project.name }}{% endblock %}
+
+    {% block content %}
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">
+                    Disable Two-Factor Authentication
+                </h3>
+
+                <div class="mt-4 bg-red-50 border border-red-200 rounded-md p-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-red-800">
+                                Warning: Security Risk
+                            </h3>
+                            <div class="mt-2 text-sm text-red-700">
+                                <p>
+                                    Disabling two-factor authentication will make your account less secure.
+                                    Your account will be protected only by your password.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6">
+                    <p class="text-sm text-gray-500">
+                        Are you sure you want to disable two-factor authentication? This will:
+                    </p>
+                    <ul class="mt-2 text-sm text-gray-500 list-disc list-inside space-y-1">
+                        <li>Remove all registered authentication devices</li>
+                        <li>Delete all backup codes</li>
+                        <li>Remove all trusted devices</li>
+                        <li>Reduce your account security</li>
+                    </ul>
+                </div>
+
+                {% if features.authentication.roles and request.user.is_staff %}
+                <div class="mt-4 bg-yellow-50 border border-yellow-200 rounded-md p-4">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-yellow-800">
+                                Staff Account Notice
+                            </h3>
+                            <div class="mt-2 text-sm text-yellow-700">
+                                <p>
+                                    As a staff member, two-factor authentication may be required by your organization's security policy.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <form method="post" class="mt-6">
+                    {% csrf_token %}
+
+                    <div class="mb-4">
+                        <label for="password" class="block text-sm font-medium text-gray-700">
+                            Confirm your password
+                        </label>
+                        <div class="mt-1">
+                            <input type="password" name="password" id="password" required
+                                   class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md"
+                                   placeholder="Enter your password to confirm">
+                        </div>
+                    </div>
+
+                    <div class="flex items-center">
+                        <input type="checkbox" name="confirm" id="confirm" required
+                               class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
+                        <label for="confirm" class="ml-2 block text-sm text-gray-900">
+                            I understand the security implications of disabling two-factor authentication
+                        </label>
+                    </div>
+
+                    <div class="mt-6 flex gap-4">
+                        <button type="submit"
+                                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                            <svg class="mr-2 -ml-1 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                            </svg>
+                            Disable Two-Factor Authentication
+                        </button>
+
+                        <a href="{% url 'account_security' %}"
+                           class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <h3 class="text-sm font-medium text-blue-800">
+                        Alternative: Manage Your Devices
+                    </h3>
+                    <div class="mt-2 text-sm text-blue-700">
+                        <p>
+                            Instead of disabling 2FA completely, you can manage your authentication methods:
+                        </p>
+                        <ul class="mt-2 list-disc list-inside space-y-1">
+                            <li>Add or remove authenticator apps</li>
+                            <li>Update phone numbers for SMS codes</li>
+                            <li>Generate new backup codes</li>
+                            <li>Manage trusted devices</li>
+                        </ul>
+                        <a href="{% url '2fa:setup' %}" class="mt-2 inline-block text-blue-600 hover:text-blue-500 font-medium">
+                            Manage authentication methods →
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endblock %}{% endraw %}

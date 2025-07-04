@@ -62,7 +62,7 @@ class ViewGenerator(BaseGenerator):
             'models': models,
             'project': schema['project'],
             'features': schema.get('features', {}),
-            'view_config': view_config,
+            'view_config': view_config if view_config else {'viewsets': {}, 'api_views': [], 'mixins': set(), 'decorators': set()},
             'imports': self._get_required_imports(models, schema, view_config),
             'has_custom_actions': any(model.get('api', {}).get('custom_actions') for model in models),
             'has_filters': any(model.get('api', {}).get('filterset_fields') for model in models),
@@ -184,6 +184,9 @@ class ViewGenerator(BaseGenerator):
                 config['decorators'].add('cache_page')
                 config['decorators'].add('vary_on_headers')
 
+            # Ensure viewsets dict exists
+            if 'viewsets' not in config:
+                config['viewsets'] = {}
             config['viewsets'][model_name] = viewset_config
 
         # API views (non-model views)

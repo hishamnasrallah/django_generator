@@ -25,6 +25,10 @@ class URLGenerator(BaseGenerator):
     order = 45
     requires = {'ViewGenerator'}
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.naming = NamingConventions()
+
     def can_generate(self, schema: Dict[str, Any]) -> bool:
         """Check if URL generation is needed."""
         return (
@@ -100,7 +104,7 @@ class URLGenerator(BaseGenerator):
             # Standard ViewSet route
             if api_config.get('viewset', True):
                 route = {
-                    'url': NamingConventions.to_url_pattern(model_name),
+                    'url': self.naming.to_url_pattern(model_name),
                     'viewset': f"{model_name}ViewSet",
                     'basename': model_name.lower(),
                 }
@@ -123,7 +127,7 @@ class URLGenerator(BaseGenerator):
                         'parent': model_name,
                         'parent_lookup': nested.get('parent_lookup', 'pk'),
                         'child': nested['model'],
-                        'url': nested.get('url', NamingConventions.to_url_pattern(nested['model'])),
+                        'url': nested.get('url', self.naming.to_url_pattern(nested['model'])),
                     }
                     config['nested_routes'].append(nested_route)
 

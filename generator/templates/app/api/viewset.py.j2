@@ -84,7 +84,11 @@ class SoftDeleteMixin:
 
 
 {% for model in models %}
+{% if view_config and view_config.viewsets and model.name in view_config.viewsets %}
 {% set viewset_config = view_config.viewsets[model.name] %}
+{% else %}
+{% set viewset_config = {'type': 'ModelViewSet', 'mixins': [], 'permissions': [], 'filterset_fields': [], 'search_fields': [], 'ordering_fields': []} %}
+{% endif %}
 class {{ model.name }}ViewSet({% if viewset_config.mixins %}{{ viewset_config.mixins|join(', ') }}, {% endif %}viewsets.{{ viewset_config.type }}):
     """
     ViewSet for {{ model.name }} model.
