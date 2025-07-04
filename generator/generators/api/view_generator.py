@@ -29,13 +29,31 @@ class ViewGenerator(BaseGenerator):
 
     def can_generate(self, schema: Dict[str, Any]) -> bool:
         """Check if REST API is enabled."""
-        return schema.get('features', {}).get('api', {}).get('rest_framework', False)
+        if not schema:
+            return False
+        features = schema.get('features', {})
+        if not features:
+            return False
+        api_config = features.get('api', {})
+        if not api_config:
+            return False
+        return api_config.get('rest_framework', False)
 
     def generate(self, schema: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> List[GeneratedFile]:
         """Generate view files for all apps."""
         self.generated_files = []
 
-        for app in schema.get('apps', []):
+        # Validate schema
+        if not schema:
+            return self.generated_files
+
+        apps = schema.get('apps', [])
+        if not apps:
+            return self.generated_files
+
+        for app in apps:
+            if not app:
+                continue
             if app.get('models'):
                 self._generate_app_views(app, schema)
 
@@ -47,28 +65,64 @@ class ViewGenerator(BaseGenerator):
 
     def _generate_app_views(self, app: Dict[str, Any], schema: Dict[str, Any]) -> None:
         """Generate views for a single app."""
-        app_name = app['name']
-        models = app.get('models', [])
+        if not app:
+            return
 
+        app_name = app.get('name', '')
+        if not app_name:
+            return
+
+        models = app.get('models', [])
         if not models:
+            return
+
+        # Filter out None models
+        valid_models = [m for m in models if m and m.get('name')]
+        if not valid_models:
             return
 
         # Analyze what's needed
         view_config = self._analyze_view_requirements(app, schema)
 
-        # Prepare context
+        # Ensure view_config is never None and has all required keys
+        if not view_config:
+            view_config = {}
+
+        view_config.setdefault('viewsets', {})
+        view_config.setdefault('api_views', [])
+        view_config.setdefault('mixins', set())
+        view_config.setdefault('decorators', set())
+
+        # Prepare context with safe defaults
         ctx = {
             'app_name': app_name,
-            'models': models,
-            'project': schema['project'],
+            'models': valid_models,
+            'project': schema.get('project', {}),
             'features': schema.get('features', {}),
-            'view_config': view_config if view_config else {'viewsets': {}, 'api_views': [], 'mixins': set(), 'decorators': set()},
-            'imports': self._get_required_imports(models, schema, view_config),
-            'has_custom_actions': any(model.get('api', {}).get('custom_actions') for model in models),
-            'has_filters': any(model.get('api', {}).get('filterset_fields') for model in models),
-            'has_search': any(model.get('api', {}).get('search_fields') for model in models),
-            'has_bulk_operations': any(model.get('api', {}).get('allow_bulk') for model in models),
+            'view_config': view_config,
+            'imports': self._get_required_imports(valid_models, schema, view_config),
+            'has_custom_actions': False,
+            'has_filters': False,
+            'has_search': False,
+            'has_bulk_operations': False,
         }
+
+        # Check features safely
+        for model in valid_models:
+            if not model:
+                continue
+            api_config = model.get('api', {})
+            if not api_config:
+                continue
+
+            if api_config.get('custom_actions'):
+                ctx['has_custom_actions'] = True
+            if api_config.get('filterset_fields'):
+                ctx['has_filters'] = True
+            if api_config.get('search_fields'):
+                ctx['has_search'] = True
+            if api_config.get('allow_bulk'):
+                ctx['has_bulk_operations'] = True
 
         # Generate main views.py
         self.create_file_from_template(
@@ -77,7 +131,7 @@ class ViewGenerator(BaseGenerator):
             ctx
         )
 
-        # Generate filters.py if needed
+        # Generate additional files if needed
         if ctx['has_filters']:
             self.create_file_from_template(
                 'app/api/filters.py.j2',
@@ -85,7 +139,6 @@ class ViewGenerator(BaseGenerator):
                 ctx
             )
 
-        # Generate permissions.py if custom permissions
         if self._needs_custom_permissions(app):
             self.create_file_from_template(
                 'app/api/permissions.py.j2',
@@ -93,7 +146,6 @@ class ViewGenerator(BaseGenerator):
                 ctx
             )
 
-        # Generate pagination.py if custom pagination
         if self._needs_custom_pagination(app):
             self.create_file_from_template(
                 'app/api/pagination.py.j2',
@@ -101,7 +153,6 @@ class ViewGenerator(BaseGenerator):
                 ctx
             )
 
-        # Generate throttling.py if needed
         if self._needs_throttling(app, schema):
             self.create_file_from_template(
                 'app/api/throttling.py.j2',
@@ -118,11 +169,26 @@ class ViewGenerator(BaseGenerator):
             'decorators': set(),
         }
 
-        features = schema.get('features', {})
+        if not app or not schema:
+            return config
 
-        for model in app.get('models', []):
-            model_name = model['name']
+        features = schema.get('features', {})
+        models = app.get('models', [])
+
+        if not models:
+            return config
+
+        for model in models:
+            if not model:
+                continue
+
+            model_name = model.get('name', '')
+            if not model_name:
+                continue
+
             api_config = model.get('api', {})
+            if api_config is None:
+                api_config = {}
 
             viewset_config = {
                 'type': 'ModelViewSet',  # Default
@@ -144,7 +210,7 @@ class ViewGenerator(BaseGenerator):
             elif api_config.get('allowed_methods'):
                 # Custom mix of operations
                 viewset_config['type'] = 'GenericViewSet'
-                methods = api_config['allowed_methods']
+                methods = api_config.get('allowed_methods', [])
 
                 mixin_map = {
                     'GET': ['ListModelMixin', 'RetrieveModelMixin'],
@@ -155,23 +221,28 @@ class ViewGenerator(BaseGenerator):
                 }
 
                 for method in methods:
-                    viewset_config['mixins'].extend(mixin_map.get(method, []))
+                    mixins = mixin_map.get(method, [])
+                    viewset_config['mixins'].extend(mixins)
 
                 # Remove duplicates
                 viewset_config['mixins'] = list(set(viewset_config['mixins']))
 
             # Custom actions
-            if api_config.get('custom_actions'):
-                for action in api_config['custom_actions']:
-                    viewset_config['actions'].append({
-                        'name': action['name'],
+            custom_actions = api_config.get('custom_actions', [])
+            if custom_actions:
+                for action in custom_actions:
+                    if not action:
+                        continue
+                    action_config = {
+                        'name': action.get('name', ''),
                         'methods': action.get('methods', ['POST']),
                         'detail': action.get('detail', True),
                         'permission_classes': action.get('permission_classes'),
                         'serializer_class': action.get('serializer_class'),
                         'description': action.get('description'),
-                    })
-                    config['decorators'].add('action')
+                    }
+                    viewset_config['actions'].append(action_config)
+                config['decorators'].add('action')
 
             # Features requiring mixins
             if api_config.get('allow_bulk'):
@@ -180,45 +251,60 @@ class ViewGenerator(BaseGenerator):
             if api_config.get('soft_delete'):
                 config['mixins'].add('SoftDeleteMixin')
 
-            if features.get('performance', {}).get('caching') and api_config.get('cache'):
+            # Safe performance config check
+            performance_config = features.get('performance', {})
+            if performance_config and performance_config.get('caching') and api_config.get('cache'):
                 config['decorators'].add('cache_page')
                 config['decorators'].add('vary_on_headers')
 
-            # Ensure viewsets dict exists
-            if 'viewsets' not in config:
-                config['viewsets'] = {}
+            # Store viewset config
             config['viewsets'][model_name] = viewset_config
 
         # API views (non-model views)
-        if app.get('api', {}).get('custom_views'):
-            for view in app['api']['custom_views']:
-                config['api_views'].append(view)
+        app_api_config = app.get('api', {})
+        if app_api_config:
+            custom_views = app_api_config.get('custom_views', [])
+            if custom_views:
+                config['api_views'].extend(custom_views)
 
         return config
 
     def _needs_base_viewsets(self, schema: Dict[str, Any]) -> bool:
         """Check if base viewset classes are needed."""
+        if not schema:
+            return False
+
         # Check if any advanced features are used
         features = schema.get('features', {})
-
-        if features.get('enterprise', {}).get('multitenancy'):
-            return True
-
-        if features.get('enterprise', {}).get('audit'):
-            return True
+        if features:
+            enterprise = features.get('enterprise', {})
+            if enterprise:
+                if enterprise.get('multitenancy'):
+                    return True
+                if enterprise.get('audit'):
+                    return True
 
         # Check for bulk operations
-        for app in schema.get('apps', []):
-            for model in app.get('models', []):
-                if model.get('api', {}).get('allow_bulk'):
-                    return True
+        apps = schema.get('apps', [])
+        if apps:
+            for app in apps:
+                if not app:
+                    continue
+                models = app.get('models', [])
+                if models:
+                    for model in models:
+                        if not model:
+                            continue
+                        api_config = model.get('api', {})
+                        if api_config and api_config.get('allow_bulk'):
+                            return True
 
         return False
 
     def _generate_base_viewsets(self, schema: Dict[str, Any]) -> None:
         """Generate base viewset classes."""
         ctx = {
-            'project': schema['project'],
+            'project': schema.get('project', {}),
             'features': schema.get('features', {}),
         }
 
@@ -230,46 +316,87 @@ class ViewGenerator(BaseGenerator):
 
     def _needs_custom_permissions(self, app: Dict[str, Any]) -> bool:
         """Check if custom permission classes are needed."""
-        for model in app.get('models', []):
+        if not app:
+            return False
+
+        models = app.get('models', [])
+        if not models:
+            return False
+
+        for model in models:
+            if not model:
+                continue
             api_config = model.get('api', {})
+            if not api_config:
+                continue
 
             # Check for custom permissions
-            if api_config.get('permissions'):
-                for perm in api_config['permissions']:
-                    if isinstance(perm, dict):  # Custom permission config
+            permissions = api_config.get('permissions', [])
+            if permissions:
+                for perm in permissions:
+                    if perm and isinstance(perm, dict):  # Custom permission config
                         return True
 
             # Check for action-level permissions
-            for action in api_config.get('custom_actions', []):
-                if action.get('permission_classes'):
-                    return True
+            custom_actions = api_config.get('custom_actions', [])
+            if custom_actions:
+                for action in custom_actions:
+                    if action and action.get('permission_classes'):
+                        return True
 
         return False
 
     def _needs_custom_pagination(self, app: Dict[str, Any]) -> bool:
         """Check if custom pagination classes are needed."""
-        for model in app.get('models', []):
-            pagination = model.get('api', {}).get('pagination')
-            if pagination and pagination != 'default':
-                return True
+        if not app:
+            return False
+
+        models = app.get('models', [])
+        if not models:
+            return False
+
+        for model in models:
+            if not model:
+                continue
+            api_config = model.get('api', {})
+            if api_config:
+                pagination = api_config.get('pagination')
+                if pagination and pagination != 'default':
+                    return True
         return False
 
     def _needs_throttling(self, app: Dict[str, Any], schema: Dict[str, Any]) -> bool:
         """Check if throttling is needed."""
         # Global throttling
-        if schema.get('features', {}).get('api', {}).get('throttling'):
-            return True
+        if schema:
+            features = schema.get('features', {})
+            if features:
+                api_features = features.get('api', {})
+                if api_features and api_features.get('throttling'):
+                    return True
 
         # Model-specific throttling
-        for model in app.get('models', []):
-            if model.get('api', {}).get('throttle'):
-                return True
+        if app:
+            models = app.get('models', [])
+            if models:
+                for model in models:
+                    if not model:
+                        continue
+                    api_config = model.get('api', {})
+                    if api_config and api_config.get('throttle'):
+                        return True
 
         return False
 
     def _get_required_imports(self, models: List[Dict[str, Any]], schema: Dict[str, Any],
                               view_config: Dict[str, Any]) -> Dict[str, List[str]]:
         """Determine required imports for views."""
+        # Filter valid model names
+        model_names = []
+        for model in models:
+            if model and model.get('name'):
+                model_names.append(model.get('name'))
+
         imports = {
             'rest_framework': [
                 'from rest_framework import viewsets, status',
@@ -280,19 +407,32 @@ class ViewGenerator(BaseGenerator):
                 'from django.shortcuts import get_object_or_404',
                 'from django.db.models import Q, Count, Sum, Avg',
             ],
-            'app': [
-                f"from .models import {', '.join(model['name'] for model in models)}",
-                f"from .serializers import {', '.join(model['name'] + 'Serializer' for model in models)}",
-            ],
+            'app': [],
             'project': [],
             'python': [],
         }
 
+        # Add model imports only if we have valid models
+        if model_names:
+            imports['app'].append(f"from .models import {', '.join(model_names)}")
+            imports['app'].append(f"from .serializers import {', '.join(name + 'Serializer' for name in model_names)}")
+
+        # Safe view_config access
+        if not view_config:
+            view_config = {}
+
         # ViewSet types
         viewset_types = set()
-        for vs_config in view_config['viewsets'].values():
-            viewset_types.add(vs_config['type'])
-            viewset_types.update(vs_config.get('mixins', []))
+        viewsets = view_config.get('viewsets', {})
+        if viewsets:
+            for vs_config in viewsets.values():
+                if not vs_config:
+                    continue
+                viewset_type = vs_config.get('type', 'ModelViewSet')
+                viewset_types.add(viewset_type)
+                mixins = vs_config.get('mixins', [])
+                if mixins:
+                    viewset_types.update(mixins)
 
         if 'GenericViewSet' in viewset_types:
             imports['rest_framework'].append('from rest_framework.viewsets import GenericViewSet')
@@ -308,17 +448,32 @@ class ViewGenerator(BaseGenerator):
         imports['rest_framework'].append('from rest_framework.permissions import IsAuthenticated, AllowAny')
 
         # Filters
-        if any(vs.get('filterset_fields') for vs in view_config['viewsets'].values()):
+        has_filters = False
+        if viewsets:
+            for vs in viewsets.values():
+                if vs and vs.get('filterset_fields'):
+                    has_filters = True
+                    break
+
+        if has_filters:
             imports['rest_framework'].append('from django_filters.rest_framework import DjangoFilterBackend')
             imports['rest_framework'].append('from rest_framework.filters import SearchFilter, OrderingFilter')
             imports['app'].append('from .filters import *')
 
         # Pagination
-        if any(vs.get('pagination') for vs in view_config['viewsets'].values()):
+        has_pagination = False
+        if viewsets:
+            for vs in viewsets.values():
+                if vs and vs.get('pagination'):
+                    has_pagination = True
+                    break
+
+        if has_pagination:
             imports['rest_framework'].append('from rest_framework.pagination import PageNumberPagination')
 
         # Cache
-        if 'cache_page' in view_config.get('decorators', set()):
+        decorators = view_config.get('decorators', set())
+        if 'cache_page' in decorators:
             imports['django'].append('from django.views.decorators.cache import cache_page')
             imports['django'].append('from django.views.decorators.vary import vary_on_headers')
 
@@ -326,14 +481,22 @@ class ViewGenerator(BaseGenerator):
         imports['django'].append('from django.db import transaction')
 
         # Features
-        features = schema.get('features', {})
-
-        # JWT
-        if features.get('authentication', {}).get('jwt'):
-            imports['rest_framework'].append('from rest_framework_simplejwt.authentication import JWTAuthentication')
+        if schema:
+            features = schema.get('features', {})
+            if features:
+                auth_features = features.get('authentication', {})
+                if auth_features and auth_features.get('jwt'):
+                    imports['rest_framework'].append('from rest_framework_simplejwt.authentication import JWTAuthentication')
 
         # Throttling
-        if any(vs.get('throttle') for vs in view_config['viewsets'].values()):
+        has_throttle = False
+        if viewsets:
+            for vs in viewsets.values():
+                if vs and vs.get('throttle'):
+                    has_throttle = True
+                    break
+
+        if has_throttle:
             imports['rest_framework'].append('from rest_framework.throttling import UserRateThrottle, AnonRateThrottle')
 
         # Swagger
