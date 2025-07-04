@@ -1,0 +1,40 @@
+[flake8]
+max-line-length = 88
+extend-ignore = E203, W503
+exclude =
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    env,
+    migrations,
+    .tox,
+    dist,
+    docs,
+    build,
+    *.egg
+
+[tool:pytest]
+DJANGO_SETTINGS_MODULE = {{ project_name }}.settings.testing
+python_files = tests.py test_*.py *_tests.py
+addopts =
+    --nomigrations
+    --reuse-db
+    --create-db
+
+[mypy]
+python_version = {{ python_version }}
+check_untyped_defs = True
+ignore_missing_imports = True
+warn_unused_ignores = True
+warn_redundant_casts = True
+warn_unused_configs = True
+
+[mypy-*.migrations.*]
+ignore_errors = True
+
+[bdist_wheel]
+universal = 1
+
+[metadata]
+license_file = LICENSE

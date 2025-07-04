@@ -1,0 +1,104 @@
+# Development requirements for {{ project_title }}
+# Includes everything from base requirements
+-r base.txt
+
+# Development server
+django-debug-toolbar==4.2.0
+django-silk==5.0.4
+werkzeug==3.0.1
+
+# Code quality tools
+black==23.12.1
+isort==5.13.2
+flake8==6.1.0
+flake8-docstrings==1.7.0
+flake8-import-order==0.18.2
+flake8-bugbear==23.12.2
+pylint==3.0.3
+pylint-django==2.5.5
+mypy==1.8.0
+django-stubs==4.2.7
+djangorestframework-stubs==3.14.5
+
+# Testing
+pytest==7.4.3
+pytest-django==4.7.0
+pytest-cov==4.1.0
+pytest-xdist==3.5.0
+pytest-timeout==2.2.0
+pytest-mock==3.12.0
+factory-boy==3.3.0
+faker==21.0.0
+model-bakery==1.17.0
+coverage==7.3.4
+tox==4.11.4
+
+# Documentation
+sphinx==7.2.6
+sphinx-rtd-theme==2.0.0
+myst-parser==2.0.0
+
+# Database tools
+django-querycount==0.8.3
+nplusone==1.0.0
+
+# Shell enhancements
+ipython==8.19.0
+ipdb==0.13.13
+django-shell-plus==1.1.7
+
+# Pre-commit hooks
+pre-commit==3.6.0
+
+# Live reload
+django-livereload-server==0.4
+
+# Performance profiling
+django-cprofile-middleware==1.0.5
+py-spy==0.3.14
+memory-profiler==0.61.0
+django-slowtests==1.1.1
+
+# Security testing
+bandit==1.7.6
+safety==3.0.1
+
+# API development tools
+httpie==3.2.2
+{% if features.api.rest_framework %}
+drftest==1.1.2
+{% endif %}
+
+# Git hooks
+commitizen==3.13.0
+gitlint==0.19.1
+
+# Debugging
+django-pdb==0.6.2
+pudb==2022.1.3
+
+# Seed data
+django-seed==0.3.1
+
+# Environment management
+django-environ==0.11.2
+
+# Better REPL
+rich==13.7.0
+ptpython==3.0.25
+
+# Task runner
+invoke==2.2.0
+honcho==1.1.0
+
+# File watching
+watchdog==3.0.0
+
+# Email testing
+django-mail-panel==4.0.4
+
+{% if features.performance.celery %}
+# Celery monitoring
+flower==2.0.1
+django-celery-monitor==1.1.2
+{% endif %}

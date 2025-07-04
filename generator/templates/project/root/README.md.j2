@@ -1,0 +1,52 @@
+# {{ project_title }}
+
+{{ project.description | default('A Django project generated with Django Enhanced Generator') }}
+
+## Overview
+
+This project was generated using Django Enhanced Generator with the following features:
+
+{% if features.api.rest_framework %}
+- ✅ REST API with Django REST Framework
+{% endif %}
+{% if features.api.graphql %}
+- ✅ GraphQL API
+{% endif %}
+{% if features.api.websockets %}
+- ✅ WebSocket support
+{% endif %}
+{% if features.database.engine %}
+- ✅ {{ features.database.engine | title }} database
+{% endif %}
+{% if features.performance.caching %}
+- ✅ Caching with {{ features.performance.caching.backend | default('Redis') }}
+{% endif %}
+{% if features.performance.celery %}
+- ✅ Asynchronous tasks with Celery
+{% endif %}
+{% if features.deployment.docker %}
+- ✅ Docker containerization
+{% endif %}
+{% if features.deployment.kubernetes %}
+- ✅ Kubernetes deployment ready
+{% endif %}
+
+## Quick Start
+
+### Prerequisites
+
+- Python {{ python_version }}
+- {% if features.database.engine == 'postgresql' %}PostgreSQL{% elif features.database.engine == 'mysql' %}MySQL{% else %}SQLite{% endif %}
+{% if features.performance.caching %}
+- Redis (for caching)
+{% endif %}
+{% if features.deployment.docker %}
+- Docker and Docker Compose
+{% endif %}
+
+### Development Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd {{ project_name }}

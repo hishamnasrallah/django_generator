@@ -131,7 +131,7 @@ repos:
       - id: hadolint-docker
         args: [--ignore, DL3008, --ignore, DL3009]
 
-{% if features.api.rest_framework %}
+{% if features.api and features.api.rest_framework %}
   # OpenAPI/Swagger validation
   - repo: local
     hooks:
@@ -143,7 +143,7 @@ repos:
         additional_dependencies: [openapi-spec-validator]
 {% endif %}
 
-{% if features.performance.celery %}
+{% if features.performance and features.performance.celery %}
   # Celery
   - repo: local
     hooks:

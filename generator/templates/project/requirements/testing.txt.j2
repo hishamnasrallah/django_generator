@@ -1,0 +1,148 @@
+# Testing requirements for {{ project_title }}
+# Includes everything from base requirements
+-r base.txt
+
+# Testing framework
+pytest==7.4.3
+pytest-django==4.7.0
+pytest-cov==4.1.0
+pytest-xdist==3.5.0
+pytest-timeout==2.2.0
+pytest-mock==3.12.0
+pytest-env==1.1.3
+pytest-factoryboy==2.6.0
+pytest-benchmark==4.0.0
+pytest-sugar==0.9.7
+pytest-clarity==1.0.1
+pytest-randomly==3.15.0
+pytest-instafail==0.5.0
+pytest-html==4.1.1
+pytest-json-report==1.5.0
+
+# Test data generation
+factory-boy==3.3.0
+faker==21.0.0
+model-bakery==1.17.0
+mixer==7.2.2
+
+# Coverage
+coverage==7.3.4
+pytest-cov==4.1.0
+coverage-badge==1.1.0
+
+# Mocking
+responses==0.24.1
+requests-mock==1.11.0
+freezegun==1.4.0
+time-machine==2.13.0
+vcrpy==5.1.0
+
+# Browser testing
+{% if features.testing.e2e %}
+selenium==4.16.0
+playwright==1.40.0
+pytest-playwright==0.4.3
+splinter==0.20.0
+{% endif %}
+
+# API testing
+{% if features.api.rest_framework %}
+drftest==1.1.2
+pytest-drf==1.1.3
+{% endif %}
+
+# Database testing
+django-test-migrations==1.3.0
+pytest-django-queries==1.2.0
+django-migration-testcase==0.1.2
+
+# Performance testing
+locust==2.20.0
+pytest-benchmark==4.0.0
+django-slowtests==1.1.1
+
+# Security testing
+bandit==1.7.6
+safety==3.0.1
+django-security-check==0.1.0
+
+# Code quality
+flake8==6.1.0
+flake8-docstrings==1.7.0
+flake8-import-order==0.18.2
+flake8-bugbear==23.12.2
+pylint==3.0.3
+pylint-django==2.5.5
+mypy==1.8.0
+django-stubs==4.2.7
+
+# Test utilities
+django-test-plus==2.2.3
+django-webtest==1.9.11
+WebTest==3.0.0
+django-dynamic-fixture==4.0.1
+
+# Email testing
+django-mail-panel==4.0.4
+maildump==1.0
+
+# File upload testing
+django-file-upload-tests==1.1.0
+
+# Debugging tests
+django-pdb==0.6.2
+ipdb==0.13.13
+pytest-pdb==0.3.1
+
+# Test reporting
+junit-xml==1.9
+pytest-html==4.1.1
+allure-pytest==2.13.2
+
+# Load testing
+ddt==1.7.1
+parameterized==0.9.0
+
+# Snapshot testing
+pytest-snapshot==0.9.0
+snapshottest==0.6.0
+
+# GraphQL testing
+{% if features.api.graphql %}
+graphene-django-testing==0.1.0
+pytest-graphql==0.1.0
+{% endif %}
+
+# WebSocket testing
+{% if features.api.websockets %}
+channels-testing==3.4.0
+{% endif %}
+
+# Contract testing
+pact-python==2.1.1
+schemathesis==3.24.3
+
+# Mutation testing
+mutmut==2.4.4
+cosmic-ray==8.3.0
+
+# Behavior testing
+behave==1.2.6
+behave-django==1.4.0
+pytest-bdd==7.0.1
+
+# Test environment
+tox==4.11.4
+nox==2023.4.22
+
+# Continuous Integration helpers
+codecov==2.1.13
+coveralls==3.3.1
+
+# Memory testing
+memory-profiler==0.61.0
+pympler==1.0.1
+
+# Test data management
+django-fixture-magic==0.1.5
+django-dynamic-fixtures==0.1.4
