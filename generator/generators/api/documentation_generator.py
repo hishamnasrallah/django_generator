@@ -80,7 +80,8 @@ class DocumentationGenerator(BaseGenerator):
         )
 
         # Generate API client examples
-        for language in ['python', 'javascript', 'curl']:
+        # for language in ['python', 'javascript', 'curl']:
+        for language in ['python',]:
             self.create_file_from_template(
                 f'api/examples/{language}_client.j2',
                 f'docs/api/examples/{language}_client.{self._get_extension(language)}',

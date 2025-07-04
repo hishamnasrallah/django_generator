@@ -1,0 +1,400 @@
+# {{ project.name }} GraphQL Query Examples
+# Generated on {{ now().strftime('%Y-%m-%d %H:%M:%S') }}
+
+# Authentication
+# =============
+
+# Login
+mutation Login($username: String!, $password: String!) {
+tokenAuth(username: $username, password: $password) {
+token
+payload
+refreshExpiresIn
+user {
+id
+username
+email
+}
+}
+}
+
+# Refresh Token
+mutation RefreshToken($token: String!) {
+refreshToken(token: $token) {
+token
+payload
+refreshExpiresIn
+}
+}
+
+# Verify Token
+mutation VerifyToken($token: String!) {
+verifyToken(token: $token) {
+payload
+}
+}
+
+# Get Current User
+query Me {
+me {
+id
+username
+email
+firstName
+lastName
+isActive
+isStaff
+dateJoined
+}
+}
+
+{% for app in apps %}
+    {% if app.models %}
+        # {{ app.name|title }} Queries
+        # {{ '=' * (app.name|title|length + 8) }}
+
+        {% for model in app.models %}
+            # {{ model.name }} Queries
+            # {{ '-' * (model.name|length + 8) }}
+
+            # Get single {{ model.name }}
+            query Get{{ model.name }}($id: ID!) {
+            {{ model.name|lower }}(id: $id) {
+            id
+            {% for field in model.fields %}
+                {{ field.name }}
+            {% endfor %}
+            createdAt
+            updatedAt
+            }
+            }
+
+            # List {{ model.name|plural }}
+            query List{{ model.name|plural }}($first: Int = 10, $after: String) {
+            all{{ model.name|plural }}(first: $first, after: $after) {
+            pageInfo {
+            hasNextPage
+            hasPreviousPage
+            startCursor
+            endCursor
+            }
+            edges {
+            cursor
+            node {
+            id
+            {% for field in model.fields[:5] %}
+                {{ field.name }}
+            {% endfor %}
+            }
+            }
+            totalCount
+            }
+            }
+
+            # List with filtering
+            query FilteredList{{ model.name|plural }}(
+            $first: Int = 10
+            $after: String
+            $orderBy: String = "-createdAt"
+            ) {
+            all{{ model.name|plural }}(
+            first: $first
+            after: $after
+            orderBy: $orderBy
+            ) {
+            edges {
+            node {
+            id
+            {% for field in model.fields[:3] %}
+                {{ field.name }}
+            {% endfor %}
+            createdAt
+            }
+            }
+            totalCount
+            }
+            }
+
+            # Create {{ model.name }}
+            mutation Create{{ model.name }}(
+            {% for field in model.fields %}
+                {% if field.required and field.name not in ['id', 'created_at', 'updated_at'] %}
+                    ${{ field.name }}: {% if field.type == 'CharField' %}String{% elif field.type == 'IntegerField' %}Int{% elif field.type == 'BooleanField' %}Boolean{% elif field.type == 'DateTimeField' %}DateTime{% elif field.type == 'DecimalField' %}Decimal{% elif field.type == 'JSONField' %}JSON{% else %}String{% endif %}!
+                {% endif %}
+            {% endfor %}
+            ) {
+            create{{ model.name }}(
+            {% for field in model.fields %}
+                {% if field.required and field.name not in ['id', 'created_at', 'updated_at'] %}
+                    {{ field.name }}: ${{ field.name }}
+                {% endif %}
+            {% endfor %}
+            ) {
+            {{ model.name|lower }} {
+            id
+            {% for field in model.fields %}
+                {{ field.name }}
+            {% endfor %}
+            createdAt
+            updatedAt
+            }
+            success
+            errors {
+            field
+            messages
+            }
+            }
+            }
+
+            # Update {{ model.name }}
+            mutation Update{{ model.name }}(
+            $id: ID!
+            {% for field in model.fields %}
+                {% if field.name not in ['id', 'created_at', 'updated_at'] %}
+                    ${{ field.name }}: {% if field.type == 'CharField' %}String{% elif field.type == 'IntegerField' %}Int{% elif field.type == 'BooleanField' %}Boolean{% elif field.type == 'DateTimeField' %}DateTime{% elif field.type == 'DecimalField' %}Decimal{% elif field.type == 'JSONField' %}JSON{% else %}String{% endif %}
+                {% endif %}
+            {% endfor %}
+            ) {
+            update{{ model.name }}(
+            id: $id
+            {% for field in model.fields %}
+                {% if field.name not in ['id', 'created_at', 'updated_at'] %}
+                    {{ field.name }}: ${{ field.name }}
+                {% endif %}
+            {% endfor %}
+            ) {
+            {{ model.name|lower }} {
+            id
+            {% for field in model.fields %}
+                {{ field.name }}
+            {% endfor %}
+            updatedAt
+            }
+            success
+            errors {
+            field
+            messages
+            }
+            }
+            }
+
+            # Delete {{ model.name }}
+            mutation Delete{{ model.name }}($id: ID!) {
+            delete{{ model.name }}(id: $id) {
+            success
+            message
+            }
+            }
+
+            {% if model.api and model.api.allow_bulk %}
+                # Bulk create {{ model.name|plural }}
+                mutation BulkCreate{{ model.name|plural }}($objects: [{{ model.name }}Input!]!) {
+                bulkCreate{{ model.name|plural }}(objects: $objects) {
+                {{ model.name|lower|plural }} {
+                id
+                {% for field in model.fields[:3] %}
+                    {{ field.name }}
+                {% endfor %}
+                }
+                createdCount
+                errors {
+                field
+                messages
+                }
+                }
+                }
+
+                # Bulk delete {{ model.name|plural }}
+                mutation BulkDelete{{ model.name|plural }}($ids: [ID!]!) {
+                bulkDelete{{ model.name|plural }}(ids: $ids) {
+                deletedCount
+                success
+                message
+                }
+                }
+            {% endif %}
+
+        {% endfor %}
+    {% endif %}
+{% endfor %}
+
+# Advanced Queries
+# ================
+
+# Global search
+query Search($query: String!, $limit: Int = 10) {
+search(query: $query, limit: $limit) {
+type
+id
+title
+data
+}
+}
+
+# Complex query with relationships
+{% if apps and apps[0].models %}
+    query {{ apps[0].models[0].name }}WithRelations($id: ID!) {
+    {{ apps[0].models[0].name|lower }}(id: $id) {
+    id
+    {% for field in apps[0].models[0].fields %}
+        {{ field.name }}
+        {% if field.type == 'ForeignKey' %}
+            {{ field.name }} {
+            id
+            name
+            }
+        {% elif field.type == 'ManyToManyField' %}
+            {{ field.name }} {
+            edges {
+            node {
+            id
+            name
+            }
+            }
+            }
+        {% endif %}
+    {% endfor %}
+    }
+    }
+{% endif %}
+
+# Query with fragments
+{% if apps and apps[0].models %}
+    fragment {{ apps[0].models[0].name }}BasicInfo on {{ apps[0].models[0].name }}Type {
+    id
+    {% for field in apps[0].models[0].fields[:3] %}
+        {{ field.name }}
+    {% endfor %}
+    createdAt
+    updatedAt
+    }
+
+    query {{ apps[0].models[0].name }}WithFragment($id: ID!) {
+    {{ apps[0].models[0].name|lower }}(id: $id) {
+    ...{{ apps[0].models[0].name }}BasicInfo
+    # Additional fields
+    {% for field in apps[0].models[0].fields[3:6] %}
+        {{ field.name }}
+    {% endfor %}
+    }
+    }
+{% endif %}
+
+# Introspection
+# =============
+
+# Get all types
+query GetAllTypes {
+__schema {
+types {
+name
+kind
+description
+}
+}
+}
+
+# Get type details
+query GetTypeDetails($typeName: String!) {
+__type(name: $typeName) {
+name
+kind
+description
+fields {
+name
+type {
+name
+kind
+}
+description
+}
+}
+}
+
+# Variables Examples
+# ==================
+
+# Example variables for queries above:
+
+# For Login:
+# {
+#   "username": "admin",
+#   "password": "password123"
+# }
+
+# For List queries:
+# {
+#   "first": 20,
+#   "after": "YXJyYXljb25uZWN0aW9uOjE5"
+# }
+
+{% if apps and apps[0].models %}
+    # For Create{{ apps[0].models[0].name }}:
+    # {
+    {% for field in apps[0].models[0].fields %}
+        {% if field.required and field.name not in ['id', 'created_at', 'updated_at'] %}
+            #   "{{ field.name }}": {% if field.type == 'CharField' %}"example value"{% elif field.type == 'IntegerField' %}123{% elif field.type == 'BooleanField' %}true{% elif field.type == 'DateTimeField' %}"2024-01-01T00:00:00Z"{% else %}"value"{% endif %},
+        {% endif %}
+    {% endfor %}
+    # }
+{% endif %}
+
+# Performance Tips
+# ================
+
+# 1. Request only needed fields
+# BAD:
+query GetEverything($id: ID!) {
+item(id: $id) {
+# ... all 50 fields
+}
+}
+
+# GOOD:
+query GetOnlyNeeded($id: ID!) {
+item(id: $id) {
+id
+name
+status
+}
+}
+
+# 2. Use pagination for lists
+query PaginatedList($cursor: String) {
+allItems(first: 20, after: $cursor) {
+pageInfo {
+hasNextPage
+endCursor
+}
+edges {
+node {
+id
+name
+}
+}
+}
+}
+
+# 3. Batch related queries
+query BatchedQuery($userId: ID!) {
+user(id: $userId) {
+id
+name
+posts(first: 10) {
+edges {
+node {
+id
+title
+}
+}
+}
+comments(first: 5) {
+edges {
+node {
+id
+content
+}
+}
+}
+}
+}

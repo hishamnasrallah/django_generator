@@ -1,0 +1,656 @@
+You're absolutely right! Let me fix the graphql/schema_docs.md.j2 template with those corrections:
+File: generator/templates/graphql/schema_docs.md.j2
+jinja2# {{ project.name }} GraphQL API Documentation
+
+Generated on {{ now().strftime('%Y-%m-%d %H:%M:%S') }}
+
+## Overview
+
+The {{ project.name }} GraphQL API provides a flexible and efficient way to query and mutate data. This document describes the available types, queries, mutations, and subscriptions.
+
+## Authentication
+
+{% if features.authentication.jwt %}
+The API uses JWT (JSON Web Token) authentication. To authenticate:
+
+1. Use the `tokenAuth` mutation to obtain an access token
+2. Include the token in the `Authorization` header: `Bearer YOUR_TOKEN`
+
+### Authentication Mutations
+
+```graphql
+mutation TokenAuth($username: String!, $password: String!) {
+  tokenAuth(username: $username, password: $password) {
+    token
+    payload
+    refreshExpiresIn
+  }
+}
+
+mutation RefreshToken($token: String!) {
+  refreshToken(token: $token) {
+    token
+    payload
+    refreshExpiresIn
+  }
+}
+
+mutation VerifyToken($token: String!) {
+  verifyToken(token: $token) {
+    payload
+  }
+}
+{% else %}
+The API uses session-based authentication. Login through the web interface or use the appropriate authentication endpoint.
+{% endif %}
+Schema Overview
+Root Types
+
+Query: Entry point for read operations
+Mutation: Entry point for write operations
+{% if has_subscriptions %}
+Subscription: Entry point for real-time updates
+{% endif %}
+
+Object Types
+{% for app in apps %}
+{% if app.models %}
+{{ app.name|title }} Types
+{% for model in app.models %}
+{{ model.name }}Type
+{{ model.description|default("Represents a " + model.name + " object.", true) }}
+**Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+{% for field in model.fields %}
+| `{{ field.name }}` | `{%- if field.type == 'CharField' -%}String{%- elif field.type == 'TextField' -%}String{%- elif field.type == 'IntegerField' -%}Int{%- elif field.type == 'BooleanField' -%}Boolean{%- elif field.type == 'DateTimeField' -%}DateTime{%- elif field.type == 'DateField' -%}Date{%- elif field.type == 'DecimalField' -%}Decimal{%- elif field.type == 'FloatField' -%}Float{%- elif field.type == 'JSONField' -%}JSON{%- elif field.type == 'ForeignKey' -%}{{ field.related_model }}Type{%- elif field.type == 'ManyToManyField' -%}[{{ field.related_model }}Type]{%- else -%}String{%- endif -%}{% if field.required %}!{% endif %}` | {{ field.description|default(field.name|title|replace('_', ' '), true) }} |
+{% endfor %}
+| `id` | `ID!` | Unique identifier |
+| `createdAt` | `DateTime!` | Creation timestamp |
+| `updatedAt` | `DateTime!` | Last update timestamp |
+{% if model.relationships %}
+Relationships:
+{% for rel in model.relationships %}
+FieldTypeDescription{{ rel.name }}{{ rel.type }}{{ rel.description }}{% endfor %}{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}
+Queries
+Global Queries
+graphqltype Query {
+  # Get current user information
+  me: UserType
+  
+  # Search across all models
+  search(
+    query: String!
+    models: [String]
+    limit: Int = 10
+  ): [SearchResult]
+  
+  # Get API statistics
+  stats(
+    dateFrom: Date
+    dateTo: Date
+  ): StatsResult
+}
+{% for app in apps %}
+{% if app.models %}
+{{ app.name|title }} Queries
+{% for model in app.models %}
+{{ model.name }} Queries
+Get Single {{ model.name }}
+graphqlquery Get{{ model.name }}($id: ID!) {
+  {{ model.name|lower }}(id: $id) {
+    id
+    {% for field in model.fields[:5] %}
+    {{ field.name }}
+    {% endfor %}
+    # ... other fields
+  }
+}
+List {{ model.name }}s
+graphqlquery List{{ model.name }}s(
+  $first: Int
+  $after: String
+  $filter: {{ model.name }}Filter
+  $orderBy: String
+) {
+  all{{ model.name }}s(
+    first: $first
+    after: $after
+    filter: $filter
+    orderBy: $orderBy
+  ) {
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        id
+        {% for field in model.fields[:5] %}
+        {{ field.name }}
+        {% endfor %}
+        # ... other fields
+      }
+    }
+    totalCount
+  }
+}
+{% if model.api and model.api.custom_queries %}
+Custom Queries
+{% for query in model.api.custom_queries %}
+{{ query.name|title }}
+{{ query.description }}
+graphqlquery {{ query.name }}(
+{% for arg in query.arguments %}
+  ${{ arg.name }}: {{ arg.type }}{% if arg.required %}!{% endif %}
+{% endfor %}
+) {
+  {{ query.name }}(
+{% for arg in query.arguments %}
+    {{ arg.name }}: ${{ arg.name }}
+{% endfor %}
+  ) {
+    # Response fields
+  }
+}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}
+Mutations
+Global Mutations
+{% if features.authentication.jwt %}
+graphqltype Mutation {
+  # Authentication
+  tokenAuth(username: String!, password: String!): ObtainJSONWebToken
+  verifyToken(token: String!): Verify
+  refreshToken(token: String!): Refresh
+  revokeToken(refreshToken: String!): Revoke
+}
+{% endif %}
+{% for app in apps %}
+{% if app.models %}
+{{ app.name|title }} Mutations
+{% for model in app.models %}
+{{ model.name }} Mutations
+Create {{ model.name }}
+graphqlmutation Create{{ model.name }}(
+{% for field in model.fields %}
+{% if field.required and field.name not in ['id', 'created_at', 'updated_at'] %}
+  ${{ field.name }}: {% if field.type == 'CharField' %}String{% elif field.type == 'IntegerField' %}Int{% elif field.type == 'BooleanField' %}Boolean{% else %}String{% endif %}!
+{% endif %}
+{% endfor %}
+) {
+  create{{ model.name }}(
+{% for field in model.fields %}
+{% if field.required and field.name not in ['id', 'created_at', 'updated_at'] %}
+    {{ field.name }}: ${{ field.name }}
+{% endif %}
+{% endfor %}
+  ) {
+    {{ model.name|lower }} {
+      id
+      {% for field in model.fields[:5] %}
+      {{ field.name }}
+      {% endfor %}
+    }
+    success
+    errors {
+      field
+      messages
+    }
+  }
+}
+Update {{ model.name }}
+graphqlmutation Update{{ model.name }}(
+  $id: ID!
+{% for field in model.fields %}
+{% if field.name not in ['id', 'created_at', 'updated_at'] %}
+  ${{ field.name }}: {% if field.type == 'CharField' %}String{% elif field.type == 'IntegerField' %}Int{% elif field.type == 'BooleanField' %}Boolean{% else %}String{% endif %}
+{% endif %}
+{% endfor %}
+) {
+  update{{ model.name }}(
+    id: $id
+{% for field in model.fields %}
+{% if field.name not in ['id', 'created_at', 'updated_at'] %}
+    {{ field.name }}: ${{ field.name }}
+{% endif %}
+{% endfor %}
+  ) {
+    {{ model.name|lower }} {
+      id
+      {% for field in model.fields[:5] %}
+      {{ field.name }}
+      {% endfor %}
+    }
+    success
+    errors {
+      field
+      messages
+    }
+  }
+}
+Delete {{ model.name }}
+graphqlmutation Delete{{ model.name }}($id: ID!) {
+  delete{{ model.name }}(id: $id) {
+    success
+    message
+  }
+}
+{% if model.api and model.api.allow_bulk %}
+Bulk Operations
+Bulk Create
+graphqlmutation BulkCreate{{ model.name }}s(
+  $objects: [{{ model.name }}Input!]!
+) {
+  bulkCreate{{ model.name }}s(objects: $objects) {
+    {{ model.name|lower }}s {
+      id
+      # ... fields
+    }
+    createdCount
+    errors {
+      field
+      messages
+    }
+  }
+}
+Bulk Delete
+graphqlmutation BulkDelete{{ model.name }}s($ids: [ID!]!) {
+  bulkDelete{{ model.name }}s(ids: $ids) {
+    deletedCount
+    success
+    message
+  }
+}
+{% endif %}
+{% if model.api and model.api.custom_mutations %}
+Custom Mutations
+{% for mutation in model.api.custom_mutations %}
+{{ mutation.name|title }}
+{{ mutation.description }}
+graphqlmutation {{ mutation.name }}(
+{% for arg in mutation.arguments %}
+  ${{ arg.name }}: {{ arg.type }}{% if arg.required %}!{% endif %}
+{% endfor %}
+) {
+  {{ mutation.name }}(
+{% for arg in mutation.arguments %}
+    {{ arg.name }}: ${{ arg.name }}
+{% endfor %}
+  ) {
+    # Response fields
+  }
+}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% if has_subscriptions %}
+Subscriptions
+Subscriptions allow real-time updates via WebSocket connections.
+Connection
+Connect to the WebSocket endpoint:
+ws://localhost:8000/ws/graphql/
+{% for app in apps %}
+{% if app.models %}
+{{ app.name|title }} Subscriptions
+{% for model in app.models %}
+{% if model.graphql is defined and model.graphql.subscriptions %}
+{{ model.name }} Subscriptions
+graphqlsubscription On{{ model.name }}Changes {
+  {{ model.name|lower }}Subscription {
+    {{ model.name|lower }}Created {
+      id
+      {% for field in model.fields[:3] %}
+      {{ field.name }}
+      {% endfor %}
+    }
+    {{ model.name|lower }}Updated {
+      id
+      {% for field in model.fields[:3] %}
+      {{ field.name }}
+      {% endfor %}
+    }
+    {{ model.name|lower }}Deleted
+  }
+}
+With filters:
+graphqlsubscription On{{ model.name }}ChangesByStatus($status: String) {
+  {{ model.name|lower }}Subscription(status: $status) {
+    # ... subscription fields
+  }
+}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
+Input Types
+{% for app in apps %}
+{% if app.models %}
+{{ app.name|title }} Input Types
+{% for model in app.models %}
+{{ model.name }}Input
+Used for creating {{ model.name }} objects.
+graphqlinput {{ model.name }}Input {
+{% for field in model.fields %}
+{% if field.name not in ['id', 'created_at', 'updated_at'] %}
+  {{ field.name }}: {% if field.type == 'CharField' %}String{% elif field.type == 'IntegerField' %}Int{% elif field.type == 'BooleanField' %}Boolean{% else %}String{% endif %}{% if field.required %}!{% endif %}
+{% endif %}
+{% endfor %}
+}
+{{ model.name }}UpdateInput
+Used for updating {{ model.name }} objects.
+graphqlinput {{ model.name }}UpdateInput {
+  id: ID!
+{% for field in model.fields %}
+{% if field.name not in ['id', 'created_at', 'updated_at'] %}
+  {{ field.name }}: {% if field.type == 'CharField' %}String{% elif field.type == 'IntegerField' %}Int{% elif field.type == 'BooleanField' %}Boolean{% else %}String{% endif %}
+{% endif %}
+{% endfor %}
+}
+{{ model.name }}Filter
+Used for filtering {{ model.name }} queries.
+graphqlinput {{ model.name }}Filter {
+{% for field in model.fields %}
+{% if field.type in ['CharField', 'IntegerField', 'BooleanField', 'DateTimeField'] %}
+  {{ field.name }}: {% if field.type == 'CharField' %}String{% elif field.type == 'IntegerField' %}Int{% elif field.type == 'BooleanField' %}Boolean{% else %}String{% endif %}
+  {{ field.name }}_In: [{% if field.type == 'CharField' %}String{% elif field.type == 'IntegerField' %}Int{% elif field.type == 'BooleanField' %}Boolean{% else %}String{% endif %}]
+  {{ field.name }}_Contains: String
+  {{ field.name }}_Startswith: String
+{% endif %}
+{% endfor %}
+  orderBy: String
+}
+{% endfor %}
+{% endif %}
+{% endfor %}
+Enums
+{% for app in apps %}
+{% for model in app.models %}
+{% for field in model.fields %}
+{% if field.choices %}
+{{ model.name }}{{ field.name|title }}Enum
+graphqlenum {{ model.name }}{{ field.name|title }}Enum {
+{% for choice in field.choices %}
+  {% if choice is sequence and choice|length == 2 %}
+  {{ choice[0]|upper|replace('-', '_') }} # {{ choice[1] }}
+  {% else %}
+  {{ choice|upper|replace('-', '_') }}
+  {% endif %}
+{% endfor %}
+}
+{% endif %}
+{% endfor %}
+{% endfor %}
+{% endfor %}
+Interfaces
+Node Interface
+All objects implementing the Relay Node interface:
+graphqlinterface Node {
+  # The ID of an object
+  id: ID!
+}
+Timestamped Interface
+Objects with timestamp fields:
+graphqlinterface Timestamped {
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+{% if features.enterprise and features.enterprise.audit %}
+Auditable Interface
+Objects with audit fields:
+graphqlinterface Auditable {
+  createdBy: UserType
+  updatedBy: UserType
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+{% endif %}
+Error Handling
+All mutations return a consistent error format:
+graphqltype ErrorType {
+  field: String
+  messages: [String!]!
+}
+Example error response:
+json{
+  "data": {
+    "createUser": {
+      "success": false,
+      "errors": [
+        {
+          "field": "email",
+          "messages": ["This email is already registered."]
+        }
+      ]
+    }
+  }
+}
+Pagination
+The API uses cursor-based pagination following the Relay specification.
+PageInfo
+graphqltype PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+Example Usage
+graphqlquery PaginatedItems {
+  allItems(first: 10, after: "YXJyYXljb25uZWN0aW9uOjA=") {
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    edges {
+      node {
+        id
+        name
+      }
+    }
+    totalCount
+  }
+}
+Filtering and Ordering
+Filtering
+Use the filter argument with model-specific filter inputs:
+graphqlquery FilteredItems {
+  allItems(
+    filter: {
+      status: "ACTIVE"
+      createdAt_Gte: "2024-01-01"
+      name_Contains: "test"
+    }
+  ) {
+    edges {
+      node {
+        id
+        name
+        status
+      }
+    }
+  }
+}
+Ordering
+Use the orderBy argument:
+graphqlquery OrderedItems {
+  allItems(orderBy: "-createdAt,name") {
+    edges {
+      node {
+        id
+        name
+        createdAt
+      }
+    }
+  }
+}
+
+Prefix with - for descending order
+Multiple fields separated by commas
+
+File Uploads
+{% if has_file_uploads %}
+The API supports file uploads using multipart requests.
+Upload Mutation Example
+graphqlmutation UploadFile($file: Upload!) {
+  uploadFile(file: $file) {
+    file {
+      id
+      url
+      size
+      mimeType
+    }
+    success
+    message
+  }
+}
+Client Implementation
+javascriptconst formData = new FormData();
+formData.append('operations', JSON.stringify({
+  query: uploadMutation,
+  variables: { file: null }
+}));
+formData.append('map', JSON.stringify({ '0': ['variables.file'] }));
+formData.append('0', fileInput.files[0]);
+
+fetch('/graphql/', {
+  method: 'POST',
+  body: formData,
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+});
+{% endif %}
+Rate Limiting
+The API implements rate limiting to prevent abuse:
+
+- Anonymous users: {{ project.get('api_settings', {}).get('anon_rate_limit', '100 requests/hour') }}
+- Authenticated users: {{ project.get('api_settings', {}).get('user_rate_limit', '1000 requests/hour') }}
+
+Rate limit information is included in response headers:
+
+X-RateLimit-Limit: Maximum requests allowed
+X-RateLimit-Remaining: Requests remaining
+X-RateLimit-Reset: Time when limit resets
+
+Best Practices
+1. Request Only What You Need
+graphql# Good - specific fields
+query {
+  user(id: "1") {
+    id
+    name
+    email
+  }
+}
+
+# Avoid - requesting everything
+query {
+  user(id: "1") {
+    # ... all fields
+  }
+}
+2. Use Fragments for Reusability
+graphqlfragment UserBasicInfo on UserType {
+  id
+  name
+  email
+}
+
+query GetUsers {
+  allUsers {
+    edges {
+      node {
+        ...UserBasicInfo
+      }
+    }
+  }
+}
+3. Batch Related Queries
+graphqlquery GetUserWithPosts($userId: ID!) {
+  user(id: $userId) {
+    id
+    name
+    posts {
+      edges {
+        node {
+          id
+          title
+        }
+      }
+    }
+  }
+}
+4. Handle Errors Gracefully
+Always check the errors field in responses and handle them appropriately in your client.
+5. Use Variables for Dynamic Values
+graphql# Good - using variables
+query GetUser($id: ID!) {
+  user(id: $id) {
+    name
+  }
+}
+
+# Avoid - string interpolation
+query {
+  user(id: "123") {
+    name
+  }
+}
+Tools and Resources
+GraphQL Playground
+Access the interactive GraphQL playground at:
+{{ project.base_url|default("http://localhost:8000", true) }}/graphql/
+Schema Introspection
+Get the full schema:
+graphqlquery IntrospectionQuery {
+  __schema {
+    types {
+      name
+      kind
+      description
+      fields {
+        name
+        type {
+          name
+          kind
+        }
+      }
+    }
+  }
+}
+Client Libraries
+Recommended GraphQL clients:
+
+JavaScript: Apollo Client, urql
+Python: gql
+Mobile: Apollo iOS, Apollo Android
+
+Changelog
+Version {{ version|default("1.0.0", true) }}
+
+Initial GraphQL API release
+Support for all CRUD operations
+{% if has_subscriptions %}
+Real-time subscriptions
+{% endif %}
+{% if has_file_uploads %}
+File upload support
+{% endif %}
+Cursor-based pagination
+Advanced filtering and ordering
+
+
+For questions or issues, please contact [support@example.com](mailto:support@example.com)

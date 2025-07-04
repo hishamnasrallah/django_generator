@@ -422,6 +422,20 @@ class BaseGenerator(ABC):
         """Get generator dependencies."""
         return self.requires
 
-    def get_provides(self) -> Set[str]:
-        """Get features this generator provides."""
-        return self.provides
+def get_provides(self) -> Set[str]:
+    """Get features this generator provides."""
+    return self.provides
+
+def create_directory(self, path: str) -> None:
+    """
+    Create a directory at the specified path.
+
+    Args:
+        path: The directory path relative to the output directory
+    """
+    directory_path = Path(path)
+    directory_path.mkdir(parents=True, exist_ok=True)
+
+    # Track directory creation in metadata if needed
+    if hasattr(self, 'created_directories'):
+        self.created_directories.add(str(directory_path))

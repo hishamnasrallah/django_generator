@@ -1,0 +1,359 @@
+# {{ project.name }} REST API
+
+Generated on {{ now().strftime('%Y-%m-%d %H:%M:%S') }}
+
+## Overview
+
+The {{ project.name }} REST API provides programmatic access to all application resources. This document describes the available endpoints, authentication methods, and usage examples.
+
+## Base URL
+{{ project.base_url|default('http://localhost:8000', true) }}/api/
+
+## Authentication
+
+The API supports multiple authentication methods:
+
+{% if features.authentication.jwt %}
+### JWT Authentication (Recommended)
+
+1. Obtain tokens by sending credentials to the login endpoint:
+
+```bash
+curl -X POST {{ project.base_url|default('http://localhost:8000', true) }}/api/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"username": "your_username", "password": "your_password"}'
+
+Use the access token in subsequent requests:
+
+bashcurl -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  {{ project.base_url|default('http://localhost:8000', true) }}/api/endpoint/
+
+Refresh the token when it expires:
+
+bashcurl -X POST {{ project.base_url|default('http://localhost:8000', true) }}/api/auth/refresh/ \
+  -H "Content-Type: application/json" \
+  -d '{"refresh": "YOUR_REFRESH_TOKEN"}'
+{% endif %}
+Token Authentication
+
+Obtain a token:
+
+bashcurl -X POST {{ project.base_url|default('http://localhost:8000', true) }}/api/auth/token/ \
+  -H "Content-Type: application/json" \
+  -d '{"username": "your_username", "password": "your_password"}'
+
+Use the token in requests:
+
+bashcurl -H "Authorization: Token YOUR_TOKEN" \
+  {{ project.base_url|default('http://localhost:8000', true) }}/api/endpoint/
+Session Authentication
+For browser-based applications, you can use session authentication by including credentials in your requests.
+API Versioning
+The API uses URL path versioning. The current version is v1.
+{{ project.base_url|default('http://localhost:8000', true) }}/api/v1/
+Rate Limiting
+API requests are rate-limited to prevent abuse:
+
+Anonymous users: 100 requests per hour
+Authenticated users: 1000 requests per hour
+
+Rate limit information is included in response headers:
+
+X-RateLimit-Limit: Maximum requests allowed
+X-RateLimit-Remaining: Requests remaining
+X-RateLimit-Reset: Time when the limit resets (Unix timestamp)
+
+Pagination
+All list endpoints are paginated using page-based pagination:
+GET /api/endpoint/?page=2&page_size=50
+Response format:
+json{
+  "count": 123,
+  "next": "{{ project.base_url|default('http://localhost:8000', true) }}/api/endpoint/?page=3",
+  "previous": "{{ project.base_url|default('http://localhost:8000', true) }}/api/endpoint/?page=1",
+  "results": [...]
+}
+Default page size: 20
+Maximum page size: 100
+Filtering, Searching, and Ordering
+Filtering
+Most endpoints support filtering:
+GET /api/endpoint/?field=value&field__lookup=value
+Common lookups:
+
+exact (default): Exact match
+icontains: Case-insensitive contains
+gt, gte, lt, lte: Greater than, less than
+in: In a list of values
+isnull: Is null/not null
+
+Example:
+GET /api/posts/?status=published&created_at__gte=2024-01-01
+Searching
+Use the search parameter to search across multiple fields:
+GET /api/endpoint/?search=query
+Ordering
+Use the ordering parameter to sort results:
+GET /api/endpoint/?ordering=-created_at,name
+
+Prefix with - for descending order
+Multiple fields separated by commas
+
+Common Response Formats
+Success Response
+json{
+  "id": 1,
+  "field1": "value1",
+  "field2": "value2",
+  "created_at": "2024-01-01T00:00:00Z",
+  "updated_at": "2024-01-01T00:00:00Z"
+}
+Error Response
+json{
+  "detail": "Error message",
+  "field_errors": {
+    "field_name": ["Error message 1", "Error message 2"]
+  }
+}
+Validation Error
+json{
+  "field_name": [
+    "This field is required.",
+    "Another validation error."
+  ]
+}
+HTTP Status Codes
+CodeDescription200OK - Request succeeded201Created - Resource created successfully204No Content - Request succeeded with no response body400Bad Request - Invalid request data401Unauthorized - Authentication required403Forbidden - Permission denied404Not Found - Resource not found405Method Not Allowed - HTTP method not supported409Conflict - Request conflicts with current state429Too Many Requests - Rate limit exceeded500Internal Server Error - Server error
+Endpoints
+{% for app in apps %}
+{% if app.models %}
+{{ app.name|title }} Endpoints
+{% for model in app.models %}
+{{ model.name }} Resource
+Base URL: /api/{{ app.name }}/{{ model.name|lower }}s/
+MethodEndpointDescriptionGET/List all {{ model.namePOST/Create a new {{ model.nameGET/{id}/Get a specific {{ model.namePUT/{id}/Update a {{ model.namePATCH/{id}/Partially update a {{ model.nameDELETE/{id}/Delete a {{ model.name{% if model.api and model.api.custom_actions %}{% for action in model.api.custom_actions %}{{ action.methodupper }}{% if action.detail %}/{id}{% endif %}/{{ action.url_name }}/{% endfor %}{% endif %}
+List {{ model.name }}s
+httpGET /api/{{ app.name }}/{{ model.name|lower }}s/
+Query parameters:
+
+page: Page number
+page_size: Items per page
+search: Search query
+ordering: Sort order
+{% for field in model.fields %}
+{% if field.type in ['CharField', 'IntegerField', 'BooleanField', 'DateTimeField'] %}
+{{ field.name }}: Filter by {{ field.name }}
+{% endif %}
+{% endfor %}
+
+Example:
+bashcurl -H "Authorization: Bearer YOUR_TOKEN" \
+  "{{ project.base_url|default('http://localhost:8000', true) }}/api/{{ app.name }}/{{ model.name|lower }}s/?page=1&page_size=10"
+Create {{ model.name }}
+httpPOST /api/{{ app.name }}/{{ model.name|lower }}s/
+Request body:
+json{
+{% for field in model.fields %}
+{% if field.required and field.name not in ['id', 'created_at', 'updated_at'] %}
+  "{{ field.name }}": {% if field.type == 'CharField' or field.type == 'TextField' %}"string"{% elif field.type == 'IntegerField' %}0{% elif field.type == 'BooleanField' %}false{% elif field.type == 'DateTimeField' %}"2024-01-01T00:00:00Z"{% elif field.type == 'DecimalField' %}"0.00"{% elif field.type == 'JSONField' %}{}{% else %}null{% endif %}{% if not loop.last %},{% endif %}
+{% endif %}
+{% endfor %}
+}
+Example:
+bashcurl -X POST {{ project.base_url|default('http://localhost:8000', true) }}/api/{{ app.name }}/{{ model.name|lower }}s/ \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+{% for field in model.fields %}
+{% if field.required and field.name not in ['id', 'created_at', 'updated_at'] %}
+    "{{ field.name }}": {% if field.type == 'CharField' %}"example"{% elif field.type == 'IntegerField' %}123{% elif field.type == 'BooleanField' %}true{% else %}"value"{% endif %}{% if not loop.last %},{% endif %}
+{% endif %}
+{% endfor %}
+  }'
+Get {{ model.name }}
+httpGET /api/{{ app.name }}/{{ model.name|lower }}s/{id}/
+Example:
+bashcurl -H "Authorization: Bearer YOUR_TOKEN" \
+  {{ project.base_url|default('http://localhost:8000', true) }}/api/{{ app.name }}/{{ model.name|lower }}s/1/
+Update {{ model.name }}
+httpPUT /api/{{ app.name }}/{{ model.name|lower }}s/{id}/
+Request body: Same as create, all fields required
+Example:
+bashcurl -X PUT {{ project.base_url|default('http://localhost:8000', true) }}/api/{{ app.name }}/{{ model.name|lower }}s/1/ \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ ... }'
+Partial Update {{ model.name }}
+httpPATCH /api/{{ app.name }}/{{ model.name|lower }}s/{id}/
+Request body: Only fields to update
+Example:
+bashcurl -X PATCH {{ project.base_url|default('http://localhost:8000', true) }}/api/{{ app.name }}/{{ model.name|lower }}s/1/ \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"{{ model.fields[0].name }}": "new value"}'
+Delete {{ model.name }}
+httpDELETE /api/{{ app.name }}/{{ model.name|lower }}s/{id}/
+Example:
+bashcurl -X DELETE {{ project.base_url|default('http://localhost:8000', true) }}/api/{{ app.name }}/{{ model.name|lower }}s/1/ \
+  -H "Authorization: Bearer YOUR_TOKEN"
+{% endfor %}
+{% endif %}
+{% endfor %}
+Global Endpoints
+Health Check
+Check API health status:
+httpGET /api/health/
+Response:
+json{
+  "status": "healthy",
+  "timestamp": "2024-01-01T00:00:00Z",
+  "version": "1.0.0"
+}
+Search
+Global search across all resources:
+httpGET /api/search/?q=query&type=ModelName
+Parameters:
+
+q: Search query (required)
+type: Filter by resource type (optional)
+limit: Maximum results (default: 10)
+
+File Uploads
+For endpoints that accept file uploads, use multipart/form-data:
+bashcurl -X POST {{ project.base_url|default('http://localhost:8000', true) }}/api/upload/ \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -F "file=@/path/to/file.jpg" \
+  -F "description=File description"
+Bulk Operations
+Some endpoints support bulk operations:
+Bulk Create
+httpPOST /api/resource/bulk_create/
+Request body:
+json{
+  "items": [
+    { ... },
+    { ... }
+  ]
+}
+Bulk Update
+httpPOST /api/resource/bulk_update/
+Request body:
+json{
+  "items": [
+    {"id": 1, ...},
+    {"id": 2, ...}
+  ]
+}
+Bulk Delete
+httpPOST /api/resource/bulk_delete/
+Request body:
+json{
+  "ids": [1, 2, 3]
+}
+Error Handling
+The API returns consistent error responses:
+Field Validation Errors
+json{
+  "field_name": [
+    "This field is required.",
+    "This field must be unique."
+  ]
+}
+General Errors
+json{
+  "detail": "Authentication credentials were not provided."
+}
+Not Found
+json{
+  "detail": "Not found."
+}
+API Clients
+Python
+See Python Client Example
+pythonfrom api_client import APIClient
+
+client = APIClient('{{ project.base_url|default('http://localhost:8000', true) }}')
+client.login('username', 'password')
+
+# List items
+items = client.list_items(page=1, page_size=10)
+
+# Create item
+new_item = client.create_item({'name': 'New Item'})
+JavaScript
+See JavaScript Client Example
+javascriptconst client = new APIClient('{{ project.base_url|default('http://localhost:8000', true) }}');
+await client.login('username', 'password');
+
+// List items
+const items = await client.listItems({ page: 1, pageSize: 10 });
+
+// Create item
+const newItem = await client.createItem({ name: 'New Item' });
+cURL
+See cURL Examples
+bash# Login
+curl -X POST {{ project.base_url|default('http://localhost:8000', true) }}/api/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"username": "user", "password": "pass"}'
+
+# Use token
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+  {{ project.base_url|default('http://localhost:8000', true) }}/api/endpoint/
+OpenAPI Documentation
+Interactive API documentation is available at:
+
+Swagger UI: {{ project.base_url|default('http://localhost:8000', true) }}/api/docs/
+ReDoc: {{ project.base_url|default('http://localhost:8000', true) }}/api/redoc/
+OpenAPI Schema: {{ project.base_url|default('http://localhost:8000', true) }}/api/schema/
+
+Testing
+Using Postman
+Import the Postman Collection to get started quickly.
+Using HTTPie
+bash# Install HTTPie
+pip install httpie
+
+# Login
+http POST {{ project.base_url|default('http://localhost:8000', true) }}/api/auth/login/ username=user password=pass
+
+# Make authenticated request
+http GET {{ project.base_url|default('http://localhost:8000', true) }}/api/endpoint/ "Authorization: Bearer YOUR_TOKEN"
+Webhooks
+{% if features.webhooks %}
+The API supports webhooks for real-time event notifications. Configure webhooks in your account settings.
+Webhook Events
+
+resource.created
+resource.updated
+resource.deleted
+
+Webhook Payload
+json{
+  "event": "resource.created",
+  "timestamp": "2024-01-01T00:00:00Z",
+  "data": {
+    "id": 1,
+    ...
+  }
+}
+Webhook Security
+All webhook requests include a signature header for verification:
+X-Webhook-Signature: sha256=SIGNATURE
+{% endif %}
+Support
+For questions or issues:
+
+Documentation: [{{ project.base_url|default('http://localhost:8000', true) }}/docs/]({{ project.base_url|default('http://localhost:8000', true) }}/docs/)
+Email: support@example.com
+Issue Tracker: GitHub Issues
+
+Changelog
+Version 1.0.0
+
+Initial API release
+Full CRUD operations for all resources
+JWT and Token authentication
+Comprehensive filtering and search
+Bulk operations support
+WebSocket support for real-time updates

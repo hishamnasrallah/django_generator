@@ -22,7 +22,7 @@ class Query(
     {{ app.name }}_schema.Query,
     {% endif %}
     {% endfor %}
-    graphene.ObjectType,
+    graphene.ObjectType
 ):
     """Root query combining all app queries."""
 
