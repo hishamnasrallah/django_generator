@@ -5,25 +5,25 @@ This file imports and registers all available generators.
 
 # Import all generators to make them discoverable
 # Core generators
-from generator.core.business_method_generator import BusinessMethodGenerator
-from generator.core.cache_generator import CacheGenerator
-from generator.core.celery_generator import CeleryTaskGenerator
-from generator.core.custom_manager_generator import CustomManagerGenerator
-from generator.core.elasticsearch_generator import ElasticsearchGenerator
-from generator.core.enhanced_project_generator import EnhancedProjectGenerator
-from generator.core.graphql_generator import GraphQLGenerator
-from generator.core.integration_generator import IntegrationGenerator
-from generator.core.monitoring_generator import MonitoringGenerator
-from generator.core.payment_generator import PaymentGatewayGenerator
-from generator.core.rule_engine_generator import RuleEngineGenerator
-from generator.core.state_machine_generator import StateMachineGenerator
-from generator.core.websocket_generator import WebSocketGenerator
+from ..core.business_method_generator import BusinessMethodGenerator
+from ..core.cache_generator import CacheGenerator
+from ..core.celery_generator import CeleryTaskGenerator
+from ..core.custom_manager_generator import CustomManagerGenerator
+from ..core.elasticsearch_generator import ElasticsearchGenerator
+from ..core.enhanced_project_generator import EnhancedProjectGenerator
+from ..core.graphql_generator import GraphQLGenerator
+from ..core.integration_generator import IntegrationGenerator
+from ..core.monitoring_generator import MonitoringGenerator
+from ..core.payment_generator import PaymentGatewayGenerator
+from ..core.rule_engine_generator import RuleEngineGenerator
+from ..core.state_machine_generator import StateMachineGenerator
+from ..core.websocket_generator import WebSocketGenerator
 
 # App generators
-from generator.generators.api.serializer_generator import SerializerGenerator
-from generator.generators.api.view_generator import ViewGenerator
-from generator.generators.app.model_generator import ModelGenerator
-from generator.generators.project.structure_generator import ProjectStructureGenerator
+from .api.serializer_generator import SerializerGenerator
+from .api.view_generator import ViewGenerator
+from .app.model_generator import ModelGenerator
+from .project.structure_generator import ProjectStructureGenerator
 
 # Export all generators
 __all__ = [
