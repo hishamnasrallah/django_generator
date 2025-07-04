@@ -9,108 +9,108 @@ from graphene_django.filter import DjangoFilterConnectionField
 from django.contrib.auth import get_user_model
 from django_filters import FilterSet, OrderingFilter
 {% for model in models %}
-from ..models import {{ model.name }}
+from ..models import {{ model.get('name', 'Model') }}
 {% endfor %}
 
 User = get_user_model()
 
 
 {% for type_def in types %}
-class {{ type_def.name }}Filter(FilterSet):
-    """Filter for {{ type_def.model_name }}."""
-    
+class {{ type_def.get('name', 'Type') }}Filter(FilterSet):
+    """Filter for {{ type_def.get('model_name', 'Model') }}."""
+
     order_by = OrderingFilter(
         fields=(
-            {% for field in type_def.filters %}
+            {% for field in type_def.get('filters', []) %}
             ('{{ field }}', '{{ field }}'),
             {% endfor %}
         )
     )
-    
+
     class Meta:
-        model = {{ type_def.model_name }}
+        model = {{ type_def.get('model_name', 'Model') }}
         fields = {
-            {% for field in type_def.filters %}
+            {% for field in type_def.get('filters', []) %}
             '{{ field }}': ['exact', 'icontains', 'istartswith'],
             {% endfor %}
         }
 
 
-class {{ type_def.name }}(DjangoObjectType):
-    """GraphQL type for {{ type_def.model_name }}."""
-    
-    {% for field in type_def.fields %}
-    {% if field.name in ['created_at', 'updated_at'] %}
-    {{ field.name }} = graphene.DateTime()
-    {% elif field.type == 'JSONField' %}
-    {{ field.name }} = graphene.JSONString()
-    {% elif field.type == 'DecimalField' %}
-    {{ field.name }} = graphene.Decimal()
+class {{ type_def.get('name', 'Type') }}(DjangoObjectType):
+    """GraphQL type for {{ type_def.get('model_name', 'Model') }}."""
+
+    {% for field in type_def.get('fields', []) %}
+    {% if field.get('name') in ['created_at', 'updated_at'] %}
+    {{ field.get('name') }} = graphene.DateTime()
+    {% elif field.get('type') == 'JSONField' %}
+    {{ field.get('name') }} = graphene.JSONString()
+    {% elif field.get('type') == 'DecimalField' %}
+    {{ field.get('name') }} = graphene.Decimal()
+{% endif %}
+{% endfor %}
+
+class Meta:
+    model = {{ type_def.get('model_name', 'Model') }}
+    filterset_class = {{ type_def.get('name', 'Type') }}Filter
+    {% if type_def.get('interfaces') %}
+    interfaces = ({{ type_def.get('interfaces')|join(', ') }},)
     {% endif %}
-    {% endfor %}
-    
-    class Meta:
-        model = {{ type_def.model_name }}
-        filterset_class = {{ type_def.name }}Filter
-        {% if type_def.interfaces %}
-        interfaces = ({{ type_def.interfaces|join(', ') }},)
-        {% endif %}
-        fields = '__all__'
-    
-    {% for field in type_def.fields %}
-    {% if field.type in ['ForeignKey', 'OneToOneField'] %}
-    def resolve_{{ field.name }}(self, info):
-        """Resolve {{ field.name }} with proper permissions."""
-        if not self.{{ field.name }}:
-            return None
-        
-        # Check permissions
-        user = info.context.user
-        if not user.is_authenticated:
-            return None
-        
-        return self.{{ field.name }}
-    {% endif %}
-    {% endfor %}
+    fields = '__all__'
+
+{% for field in type_def.get('fields', []) %}
+{% if field.get('type') in ['ForeignKey', 'OneToOneField'] %}
+def resolve_{{ field.get('name') }}(self, info):
+    """Resolve {{ field.get('name') }} with proper permissions."""
+    if not self.{{ field.get('name') }}:
+        return None
+
+    # Check permissions
+    user = info.context.user
+    if not user.is_authenticated:
+        return None
+
+    return self.{{ field.get('name') }}
+{% endif %}
+{% endfor %}
 
 
 {% endfor %}
 
 # Input types for mutations
 {% for type_def in types %}
-class {{ type_def.model_name }}Input(graphene.InputObjectType):
-    """Input type for {{ type_def.model_name }} mutations."""
-    
-    {% for field in type_def.fields %}
-    {% if not field.name in ['id', 'created_at', 'updated_at'] %}
-    {{ field.name }} = graphene.{{ field.type }}({% if field.required %}required=True{% endif %})
-    {% endif %}
-    {% endfor %}
+class {{ type_def.get('model_name', 'Model') }}Input(graphene.InputObjectType):
+    """Input type for {{ type_def.get('model_name', 'Model') }} mutations."""
+
+    {% for field in type_def.get('fields', []) %}
+    {% if field.get('name') not in ['id', 'created_at', 'updated_at'] %}
+    {{ field.get('name') }} = graphene.String({% if field.get('required') %}required=True{% endif %})
+{% endif %}
+{% endfor %}
 
 
-class {{ type_def.model_name }}UpdateInput(graphene.InputObjectType):
-    """Input type for {{ type_def.model_name }} updates."""
-    
+class {{ type_def.get('model_name', 'Model') }}UpdateInput(graphene.InputObjectType):
+    """Input type for {{ type_def.get('model_name', 'Model') }} updates."""
+
     id = graphene.ID(required=True)
-    {% for field in type_def.fields %}
-    {% if not field.name in ['id', 'created_at', 'updated_at'] %}
-    {{ field.name }} = graphene.{{ field.type }}()
-    {% endif %}
-    {% endfor %}
+    {% for field in type_def.get('fields', []) %}
+    {% if field.get('name') not in ['id', 'created_at', 'updated_at'] %}
+    {{ field.get('name') }} = graphene.String()
+{% endif %}
+{% endfor %}
 
 
 {% endfor %}
 
 # Connection types for pagination
 {% for type_def in types %}
-class {{ type_def.name }}Connection(graphene.relay.Connection):
-    """Connection for {{ type_def.model_name }} pagination."""
-    
+class {{ type_def.get('name', 'Type') }}Connection(graphene.relay.Connection):
+    """Connection for {{ type_def.get('model_name', 'Model') }} pagination."""
+
     class Meta:
-        node = {{ type_def.name }}
-    
+        node = {{ type_def.get('name', 'Type') }}
+
     total_count = graphene.Int()
-    
+
     def resolve_total_count(self, info):
         return self.length
 
@@ -120,15 +120,15 @@ class {{ type_def.name }}Connection(graphene.relay.Connection):
 # Custom scalar types
 class Upload(graphene.Scalar):
     """Upload scalar type for file uploads."""
-    
+
     @staticmethod
     def serialize(value):
         return value
-    
+
     @staticmethod
     def parse_literal(node):
         return node
-    
+
     @staticmethod
     def parse_value(value):
         return value
@@ -136,18 +136,18 @@ class Upload(graphene.Scalar):
 
 # Enums
 {% for model in models %}
-{% for field in model.fields %}
-{% if field.choices %}
-class {{ model.name }}{{ field.name|title }}Enum(graphene.Enum):
-    """Enum for {{ model.name }}.{{ field.name }} choices."""
-    
-    {% for choice in field.choices %}
+{% for field in model.get('fields', []) %}
+{% if field and field.get('choices') %}
+class {{ model.get('name', 'Model') }}{{ field.get('name', 'field')|title }}Enum(graphene.Enum):
+    """Enum for {{ model.get('name', 'Model') }}.{{ field.get('name', 'field') }} choices."""
+
+    {% for choice in field.get('choices', []) %}
     {% if choice is string %}
-    {{ choice|upper }} = '{{ choice }}'
-    {% else %}
-    {{ choice[0]|upper }} = '{{ choice[0] }}'
-    {% endif %}
-    {% endfor %}
+    {{ choice|upper|replace(' ', '_')|replace('-', '_') }} = '{{ choice }}'
+    {% elif choice is sequence and choice|length >= 2 %}
+    {{ choice[0]|upper|replace(' ', '_')|replace('-', '_') }} = '{{ choice[0] }}'
+{% endif %}
+{% endfor %}
 
 
 {% endif %}
@@ -155,10 +155,10 @@ class {{ model.name }}{{ field.name|title }}Enum(graphene.Enum):
 {% endfor %}
 
 # Union types for polymorphic models
-{% if models|length > 1 %}
+{% if types|length > 1 %}
 class {{ app_name|title }}Union(graphene.Union):
     """Union type for {{ app_name }} models."""
-    
+
     class Meta:
         types = ({{ types|map(attribute='name')|join(', ') }})
 
@@ -168,14 +168,14 @@ class {{ app_name|title }}Union(graphene.Union):
 # Interface for common fields
 class TimestampedInterface(graphene.Interface):
     """Interface for models with timestamps."""
-    
+
     created_at = graphene.DateTime()
     updated_at = graphene.DateTime()
 
 
 class AuditInterface(graphene.Interface):
     """Interface for auditable models."""
-    
+
     created_by = graphene.Field('users.schema.UserType')
     updated_by = graphene.Field('users.schema.UserType')
     created_at = graphene.DateTime()
@@ -185,7 +185,7 @@ class AuditInterface(graphene.Interface):
 # Custom field resolvers
 class CustomFieldMixin:
     """Mixin for custom field resolvers."""
-    
+
     def resolve_display_name(self, info):
         """Resolve display name for the object."""
         if hasattr(self, 'name'):
@@ -194,27 +194,29 @@ class CustomFieldMixin:
             return self.title
         else:
             return str(self)
-    
+
     def resolve_permissions(self, info):
         """Resolve user permissions for this object."""
         user = info.context.user
         if not user.is_authenticated:
             return []
-        
+
         permissions = []
         model_name = self.__class__.__name__.lower()
-        
+
         if user.has_perm(f'{{ app_name }}.view_{model_name}'):
             permissions.append('view')
         if user.has_perm(f'{{ app_name }}.change_{model_name}'):
             permissions.append('change')
         if user.has_perm(f'{{ app_name }}.delete_{model_name}'):
             permissions.append('delete')
-        
+
         return permissions
 
 
 # Apply custom field mixin to all types
 {% for type_def in types %}
-{{ type_def.name }}.__bases__ = (CustomFieldMixin,) + {{ type_def.name }}.__bases__
+{% if type_def and type_def.get('name') %}
+{{ type_def.get('name') }}.__bases__ = (CustomFieldMixin,) + {{ type_def.get('name') }}.__bases__
+{% endif %}
 {% endfor %}

@@ -15,7 +15,7 @@ from ..config.settings import Settings
 
 class GeneratorMetadata:
     """Metadata for a generator."""
-    
+
     def __init__(self, generator_class: Type[BaseGenerator]):
         self.generator_class = generator_class
         self.name = generator_class.name
@@ -26,7 +26,7 @@ class GeneratorMetadata:
         self.provides = generator_class.provides
         self.module = generator_class.__module__
         self.category = self._determine_category(generator_class)
-    
+
     def _determine_category(self, generator_class: Type[BaseGenerator]) -> str:
         """Determine the category based on the module path."""
         module = generator_class.__module__
@@ -180,7 +180,7 @@ class GeneratorRegistry:
                 print(f"Warning: Duplicate generator name '{name}', replacing with {generator_class}")
 
         self.generators[name] = metadata
-    
+
     def register(self, generator_class: Type[BaseGenerator]) -> None:
         """Alias for register_class for backward compatibility."""
         self.register_class(generator_class)
@@ -343,7 +343,7 @@ class GeneratorRegistry:
             for requirement in generator.requires:
                 if requirement not in selected_set:
                     # Check if any selected generator provides this
-                    provided = False 
+                    provided = False
                     for other_name in selected_set:
                         other = self.get_generator(other_name)
                         if other and requirement in other.provides:
@@ -379,7 +379,7 @@ class GeneratorRegistry:
         return [
             self.get_generator_info(name)
             for name in sorted(self.generators.keys())
-        ] 
+        ]
 
     def check_conflicts(self, selected_generators: List[str]) -> List[str]:
         """

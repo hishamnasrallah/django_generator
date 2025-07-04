@@ -31,13 +31,14 @@ all_{{ model.name|lower|plural }} = DjangoFilterConnectionField(
 )
 
 # Custom queries
-{% if model.api and model.api.custom_queries %}
-{% for query in model.api.custom_queries %}
-{{ query.name }} = graphene.{{ query.return_type }}(
-{% for arg in query.arguments %}
-{{ arg.name }}=graphene.{{ arg.type }}({% if arg.required %}required=True{% endif %}),
+{% set model_api = model.get('api', {}) if model else {} %}
+{% if model_api.get('custom_queries') %}
+{% for query in model_api.get('custom_queries', []) %}
+{{ query.get('name', 'custom_query') }} = graphene.{{ query.get('return_type', 'Field') }}(
+{% for arg in query.get('arguments', []) %}
+{{ arg.get('name', 'arg') }}=graphene.{{ arg.get('type', 'String') }}({% if arg.get('required') %}required=True{% endif %}),
 {% endfor %}
-description="{{ query.description }}"
+description="{{ query.get('description', 'Custom query') }}"
 )
 {% endfor %}
 {% endif %}
@@ -67,26 +68,29 @@ def resolve_all_{{ model.name|lower|plural }}(self, info, **kwargs):
 
     queryset = {{ model.name }}.objects.all()
 
-    {% if model.api and model.api.default_ordering %}
+    {% set model_api = model.get('api', {}) if model else {} %}
+    {% if model_api.get('default_ordering') %}
     # Apply default ordering
-    queryset = queryset.order_by({{ model.api.default_ordering }})
+    queryset = queryset.order_by('{{ model_api.get('default_ordering') }}')
     {% endif %}
 
-    {% if model.api and model.api.select_related %}
+    {% if model_api.get('select_related') %}
     # Optimize queries
-    queryset = queryset.select_related({{ model.api.select_related|join(', ') }})
+    queryset = queryset.select_related(*{{ model_api.get('select_related') }})
     {% endif %}
 
-    {% if model.api and model.api.prefetch_related %}
-    queryset = queryset.prefetch_related({{ model.api.prefetch_related|join(', ') }})
+    {% if model_api.get('prefetch_related') %}
+    queryset = queryset.prefetch_related(*{{ model_api.get('prefetch_related') }})
     {% endif %}
 
-    {% if model.features and model.features.soft_delete %}
+    {% set model_features = model.get('features', {}) if model else {} %}
+    {% if model_features.get('soft_delete') %}
     # Filter out soft deleted items
     queryset = queryset.filter(is_deleted=False)
     {% endif %}
 
-    {% if features.enterprise.multitenancy %}
+    {% set enterprise_features = features.get('enterprise', {}) if features else {} %}
+    {% if enterprise_features.get('multitenancy') %}
     # Filter by tenant
     if hasattr(info.context, 'tenant'):
         queryset = queryset.filter(tenant=info.context.tenant)
@@ -94,12 +98,12 @@ def resolve_all_{{ model.name|lower|plural }}(self, info, **kwargs):
 
     return queryset
 
-{% if model.api and model.api.custom_queries %}
+{% if model_api.get('custom_queries') %}
 # Custom query resolvers
-{% for query in model.api.custom_queries %}
-def resolve_{{ query.name }}(self, info, **kwargs):
-    """{{ query.description }}"""
-{{ query.implementation|indent(8) }}
+{% for query in model_api.get('custom_queries', []) %}
+def resolve_{{ query.get('name', 'custom_query') }}(self, info, **kwargs):
+    """{{ query.get('description', 'Resolve custom query') }}"""
+{{ query.get('implementation', 'pass')|indent(8) }}
 
 {% endfor %}
 {% endif %}
@@ -124,10 +128,11 @@ class SearchQuery(graphene.ObjectType):
         # Define searchable models
         searchable_models = {
             {% for model in models %}
-            {% if model.api and model.api.searchable %}
+            {% set model_api = model.get('api', {}) if model else {} %}
+            {% if model_api.get('searchable') %}
             '{{ model.name|lower }}': {
                 'model': {{ model.name }},
-            'fields': {{ model.api.search_fields|default(['name'], true) }},
+            'fields': {{ model_api.get('search_fields', ['name']) }},
         'type': '{{ model.name }}'
         },
         {% endif %}
@@ -173,7 +178,8 @@ class StatsQuery(graphene.ObjectType):
     """Statistics queries."""
 
     {% for model in models %}
-    {% if model.api and model.api.enable_stats %}
+    {% set model_api = model.get('api', {}) if model else {} %}
+    {% if model_api.get('enable_stats') %}
     {{ model.name|lower }}_stats = graphene.Field(
         graphene.JSONString,
         date_from=graphene.Date(),
@@ -203,11 +209,11 @@ class StatsQuery(graphene.ObjectType):
             }
         }
 
-        {% if model.api.stats_config %}
+        {% if model_api.get('stats_config') %}
         # Custom statistics
-        {% for stat in model.api.stats_config %}
-        stats['{{ stat.name }}'] = queryset.aggregate(
-            {{ stat.aggregation }}
+        {% for stat in model_api.get('stats_config', []) %}
+        stats['{{ stat.get('name', 'stat') }}'] = queryset.aggregate(
+            {{ stat.get('aggregation', 'Count("id")') }}
         )
         {% endfor %}
         {% endif %}

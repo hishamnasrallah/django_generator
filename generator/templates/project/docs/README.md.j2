@@ -1,0 +1,638 @@
+# {{ project_title }} Documentation
+
+Welcome to the {{ project_title }} documentation. This guide will help you understand, develop, and deploy the application.
+
+## Table of Contents
+
+1. [Architecture Overview](ARCHITECTURE.md)
+2. [API Documentation](API.md)
+3. [Deployment Guide](DEPLOYMENT.md)
+4. [Contributing Guidelines](CONTRIBUTING.md)
+5. [Development Setup](#development-setup)
+6. [Testing](#testing)
+7. [Troubleshooting](#troubleshooting)
+
+## Development Setup
+
+### Prerequisites
+
+- Python {{ python_version }}+
+- {% if features.database.engine == 'postgresql' %}PostgreSQL 13+{% elif features.database.engine == 'mysql' %}MySQL 8.0+{% else %}SQLite 3.8+{% endif %}
+{% if features.performance.caching %}
+- Redis 6.0+
+{% endif %}
+{% if features.deployment.docker %}
+- Docker 20.10+
+- Docker Compose 2.0+
+{% endif %}
+
+### Quick Start
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd {{ project_name }}
+
+Create a virtual environment
+bashpython -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+Install dependencies
+bashpip install -r requirements/development.txt
+
+Set up environment variables
+bashcp .env.example .env
+# Edit .env with your configuration
+
+Run migrations
+bashpython manage.py migrate
+
+Create a superuser
+bashpython manage.py createsuperuser
+
+Run the development server
+bashpython manage.py runserver
+
+
+Visit http://localhost:8000 to see the application.
+Testing
+Running Tests
+bash# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov={{ project_name }} --cov-report=html
+
+# Run specific test module
+pytest apps/<app_name>/tests/test_models.py
+
+# Run with parallel execution
+pytest -n auto
+Test Structure
+apps/
+└── <app_name>/
+└── tests/
+├── __init__.py
+├── test_models.py
+├── test_views.py
+├── test_serializers.py
+├── test_api.py
+└── test_integration.py
+Writing Tests
+Example test:
+pythonfrom django.test import TestCase
+from apps.myapp.models import MyModel
+
+class MyModelTestCase(TestCase):
+def setUp(self):
+self.instance = MyModel.objects.create(
+name="Test Instance"
+)
+
+    def test_str_representation(self):
+        self.assertEqual(str(self.instance), "Test Instance")
+Code Quality
+Linting
+bash# Run all linters
+make lint
+
+# Run specific linters
+flake8 .
+black --check .
+isort --check-only .
+pylint {{ project_name }}/ apps/
+Type Checking
+bashmypy {{ project_name }}/ apps/
+Security Checks
+bashbandit -r {{ project_name }}/ apps/
+safety check
+Database Management
+Migrations
+bash# Create migrations
+python manage.py makemigrations
+
+# Apply migrations
+python manage.py migrate
+
+# Show migration plan
+python manage.py showmigrations
+
+# Rollback migration
+python manage.py migrate <app_name> <migration_name>
+Database Commands
+bash# Create database backup
+python manage.py dbbackup
+
+# Restore database
+python manage.py dbrestore
+
+# Reset database (development only)
+python manage.py reset_db --noinput
+API Development
+{% if features.api.rest_framework %}
+REST API
+The REST API is available at /api/. Documentation is available at:
+
+Swagger UI: http://localhost:8000/api/swagger/
+ReDoc: http://localhost:8000/api/redoc/
+
+Authentication
+bash# Get JWT token
+curl -X POST http://localhost:8000/api/auth/token/ \
+-H "Content-Type: application/json" \
+-d '{"username": "user", "password": "pass"}'
+
+# Use token in requests
+curl http://localhost:8000/api/endpoint/ \
+-H "Authorization: Bearer <token>"
+{% endif %}
+{% if features.api.graphql %}
+GraphQL
+The GraphQL endpoint is available at /graphql/.
+GraphiQL interface is available at http://localhost:8000/graphql/
+Example query:
+graphqlquery {
+allUsers {
+edges {
+node {
+id
+username
+email
+}
+}
+}
+}
+{% endif %}
+Troubleshooting
+Common Issues
+Database Connection Error
+
+Check if the database service is running
+Verify database credentials in .env
+Ensure database exists
+
+Static Files Not Loading
+bashpython manage.py collectstatic --noinput
+Redis Connection Error
+
+Check if Redis is running: redis-cli ping
+Verify Redis URL in .env
+
+{% if features.performance.celery %}
+Celery Not Processing Tasks
+
+Check if Celery worker is running: celery -A {{ project_name }} status
+Check Redis/RabbitMQ connection
+Check Celery logs for errors
+{% endif %}
+
+Debug Mode
+Enable debug mode for detailed error messages:
+python# In .env
+DEBUG=True
+Warning: Never enable debug mode in production!
+Logging
+Check application logs:
+bash# Development
+tail -f debug.log
+
+# Production
+tail -f /var/log/{{ project_name }}/app.log
+Performance Optimization
+Database Queries
+
+Use select_related() for foreign keys
+Use prefetch_related() for many-to-many
+Use only() to limit fields
+Add database indexes for frequently queried fields
+
+Caching
+pythonfrom django.core.cache import cache
+
+# Set cache
+cache.set('key', 'value', 300)  # 5 minutes
+
+# Get cache
+value = cache.get('key')
+Static Files
+
+Use CDN for static files in production
+Enable compression
+Set proper cache headers
+
+Additional Resources
+
+Django Documentation
+Django REST Framework
+{% if features.api.graphql %}
+Graphene Django
+{% endif %}
+{% if features.performance.celery %}
+Celery Documentation
+{% endif %}
+
+
+## 22. Missing Template: `generator/templates/project/docs/ARCHITECTURE.md.j2`
+
+**File path:** `generator/templates/project/docs/ARCHITECTURE.md.j2`
+**New code:**
+```markdown
+# {{ project_title }} Architecture
+
+## Overview
+
+{{ project_title }} is built using Django {{ django_version }} following a modular, scalable architecture designed for maintainability and performance.
+
+## Architecture Diagram
+┌─────────────────────────────────────────────────────────────┐
+│                         Frontend                             │
+│  (Web Browser / Mobile App / API Clients)                  │
+└─────────────────────┬───────────────────────────────────────┘
+│
+▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Load Balancer / Nginx                     │
+└─────────────────────┬───────────────────────────────────────┘
+│
+┌─────────────┴──────────────┬─────────────────┐
+▼                            ▼                 ▼
+┌───────────────┐           ┌───────────────┐  ┌──────────────┐
+│  Web Server   │           │  Web Server   │  │ Static Files │
+│   (Gunicorn)  │           │   (Gunicorn)  │  │    (CDN)     │
+└───────┬───────┘           └───────┬───────┘  └──────────────┘
+│                           │
+└─────────────┬─────────────┘
+▼
+┌─────────────────────────────────┐
+│      Django Application         │
+│  ┌─────────────────────────┐   │
+│  │   {% if features.api.rest_framework %}REST API{% endif %}{% if features.api.graphql %} / GraphQL{% endif %}     │   │
+│  └─────────────────────────┘   │
+│  ┌─────────────────────────┐   │
+│  │   Business Logic        │   │
+│  └─────────────────────────┘   │
+│  ┌─────────────────────────┐   │
+│  │   Models / ORM          │   │
+│  └─────────────────────────┘   │
+└──────────┬──────────────────────┘
+│
+┌──────────────┼───────────────┬──────────────────┐
+▼              ▼               ▼                  ▼
+┌─────────┐  ┌──────────┐  {% if features.performance.caching %}┌──────────┐{% endif %}  {% if features.performance.celery %}┌──────────────┐{% endif %}
+│Database │  │{% if features.performance.elasticsearch %}Search   {% else %}  Files  {% endif %}│  {% if features.performance.caching %}│  Cache   │{% endif %}  {% if features.performance.celery %}│ Task Queue   │{% endif %}
+│  ({% if features.database.engine == 'postgresql' %}PG{% elif features.database.engine == 'mysql' %}MySQL{% else %}SQLite{% endif %})  │  │{% if features.performance.elasticsearch %}  (ES)   {% else %}  (S3)   {% endif %}│  {% if features.performance.caching %}│ (Redis)  │{% endif %}  {% if features.performance.celery %}│   (Celery)   │{% endif %}
+└─────────┘  └──────────┘  {% if features.performance.caching %}└──────────┘{% endif %}  {% if features.performance.celery %}└──────────────┘{% endif %}
+
+## Component Architecture
+
+### 1. Presentation Layer
+
+{% if features.api.rest_framework %}
+#### REST API
+- **Framework**: Django REST Framework
+- **Authentication**: {% if features.authentication.jwt %}JWT{% else %}Token-based{% endif %}
+- **Versioning**: {% if features.api.versioning %}{{ features.api.versioning }}{% else %}URL path versioning{% endif %}
+- **Documentation**: OpenAPI 3.0 (Swagger/ReDoc)
+{% endif %}
+
+{% if features.api.graphql %}
+#### GraphQL API
+- **Framework**: Graphene-Django
+- **Authentication**: {% if features.authentication.jwt %}JWT{% else %}Session-based{% endif %}
+- **Schema**: Relay-compliant
+- **Documentation**: GraphiQL interface
+{% endif %}
+
+{% if features.api.websockets %}
+#### WebSocket Support
+- **Framework**: Django Channels
+- **Protocol**: WebSocket with fallback to long-polling
+- **Use Cases**: Real-time notifications, live updates
+{% endif %}
+
+### 2. Application Layer
+
+#### Apps Structure
+apps/
+{% for app in apps %}
+├── {{ app.name }}/
+│   ├── models.py       # Data models
+│   ├── views.py        # View logic
+│   ├── serializers.py  # API serializers
+│   ├── urls.py         # URL routing
+│   ├── admin.py        # Admin interface
+│   ├── signals.py      # Signal handlers
+│   └── tests/          # Test suite
+{% endfor %}
+
+#### Key Design Patterns
+
+1. **Model-View-Template (MVT)**
+   - Models define data structure
+   - Views handle business logic
+   - Templates render HTML (for web views)
+
+2. **Repository Pattern**
+   - Custom managers for complex queries
+   - Separation of data access logic
+
+3. **Service Layer**
+   - Business logic separated from views
+   - Reusable across different interfaces
+
+4. **Factory Pattern**
+   - Test data generation
+   - Object creation abstraction
+
+### 3. Data Layer
+
+#### Database Architecture
+
+**Primary Database**: {% if features.database.engine == 'postgresql' %}PostgreSQL{% elif features.database.engine == 'mysql' %}MySQL{% else %}SQLite{% endif %}
+
+{% if features.database.read_replica %}
+**Read Replicas**: Configured for read-heavy operations
+{% endif %}
+
+**Schema Design Principles**:
+- Normalized to 3NF where appropriate
+- Denormalized for performance-critical read operations
+- Proper indexing on foreign keys and frequently queried fields
+
+#### Data Models
+
+Key models and their relationships:
+
+```python
+# Example model structure
+{% for app in apps %}{% for model in app.models|default([]) %}
+class {{ model.name }}(models.Model):
+    # Core fields
+    {% for field in model.fields[:3] %}
+    {{ field.name }} = models.{{ field.type }}()
+    {% endfor %}
+    # ... additional fields
+{% endfor %}{% endfor %}
+{% if features.performance.caching %}
+4. Caching Layer
+Cache Backend: {{ features.performance.caching.backend|title }}
+Caching Strategy:
+
+Page-level caching for static content
+Object-level caching for frequently accessed data
+Query result caching for expensive operations
+Session caching for better performance
+
+Cache Invalidation:
+
+Time-based expiration (TTL)
+Event-based invalidation on updates
+Manual invalidation for critical updates
+{% endif %}
+
+{% if features.performance.celery %}
+5. Asynchronous Processing
+Task Queue: Celery with {{ features.performance.caching.backend|default('Redis') }} broker
+Use Cases:
+
+Email sending
+Report generation
+Data import/export
+Scheduled tasks
+Background data processing
+
+Task Organization:
+python# tasks.py structure
+@celery_task
+def send_email_task(user_id, template, context):
+    """Send email asynchronously"""
+    pass
+
+@celery_periodic_task(run_every=crontab(hour=0, minute=0))
+def daily_cleanup():
+    """Daily cleanup task"""
+    pass
+{% endif %}
+{% if features.performance.elasticsearch %}
+6. Search Architecture
+Search Engine: Elasticsearch
+Implementation:
+
+Full-text search across multiple models
+Faceted search and filtering
+Auto-completion and suggestions
+Search result ranking and boosting
+
+Index Strategy:
+
+Separate indices per model type
+Real-time indexing via signals
+Bulk indexing for initial data load
+{% endif %}
+
+Security Architecture
+Authentication & Authorization
+{% if features.authentication %}
+Authentication Methods:
+{% if features.authentication.jwt %}
+
+JWT tokens for API access
+{% endif %}
+{% if features.authentication.oauth2 %}
+OAuth2 integration ({{ features.authentication.oauth2.providers|join(', ') }})
+{% endif %}
+{% if features.authentication.two_factor %}
+Two-factor authentication (2FA)
+{% endif %}
+Session-based authentication for web interface
+{% endif %}
+
+Authorization:
+
+Role-based access control (RBAC)
+Object-level permissions
+API endpoint permissions
+Admin interface restrictions
+
+Security Measures
+
+Data Protection
+
+Encryption at rest for sensitive data
+TLS/SSL for data in transit
+Secure password hashing (PBKDF2)
+
+
+Application Security
+
+CSRF protection
+XSS prevention
+SQL injection protection via ORM
+Rate limiting on API endpoints
+
+
+Infrastructure Security
+
+Firewall configuration
+Regular security updates
+Intrusion detection
+Log monitoring and alerting
+
+
+
+Deployment Architecture
+{% if features.deployment.docker %}
+Containerization
+Docker Composition:
+
+Web application container
+Database container
+{% if features.performance.caching %}
+Redis container
+{% endif %}
+{% if features.performance.celery %}
+Celery worker container
+Celery beat container
+{% endif %}
+{% if features.performance.elasticsearch %}
+Elasticsearch container
+{% endif %}
+
+Container Orchestration:
+{% if features.deployment.kubernetes %}
+
+Kubernetes for production
+Horizontal pod autoscaling
+Rolling updates
+{% else %}
+Docker Compose for development
+Docker Swarm for simple production setups
+{% endif %}
+{% endif %}
+
+Infrastructure
+Hosting Options:
+{% if features.deployment.hosting == 'aws' %}
+
+AWS EC2/ECS for compute
+RDS for database
+S3 for static files
+CloudFront for CDN
+{% elif features.deployment.hosting == 'heroku' %}
+Heroku dynos for application
+Heroku Postgres for database
+Heroku Redis for caching
+{% else %}
+VPS/Dedicated servers
+Managed database services
+CDN for static content
+{% endif %}
+
+Performance Considerations
+Optimization Strategies
+
+Database Optimization
+
+Query optimization with select_related() and prefetch_related()
+Database connection pooling
+Proper indexing strategy
+Query result caching
+
+
+Application Optimization
+
+Lazy loading of heavy resources
+Pagination for large datasets
+Async processing for heavy operations
+Response compression
+
+
+Frontend Optimization
+
+Static file minification
+CDN distribution
+Browser caching headers
+Image optimization
+
+
+
+Monitoring & Metrics
+Application Monitoring:
+{% if features.deployment.monitoring %}
+
+Sentry for error tracking
+{% endif %}
+Application performance monitoring (APM)
+Custom business metrics
+Health check endpoints
+
+Infrastructure Monitoring:
+
+Server resource monitoring
+Database performance metrics
+Cache hit/miss ratios
+Queue length monitoring
+
+Scalability Strategy
+Horizontal Scaling
+
+Stateless application design
+Load balancing across instances
+Database read replicas
+Distributed caching
+
+Vertical Scaling
+
+Resource allocation optimization
+Database query optimization
+Caching strategy refinement
+Code performance improvements
+
+Development Workflow
+CI/CD Pipeline
+
+Code Commit → Git repository
+CI Build → Run tests, linting, security checks
+Build Artifacts → Docker images, static files
+Deploy to Staging → Automated deployment
+Integration Tests → End-to-end testing
+Deploy to Production → Blue-green deployment
+
+Environment Strategy
+
+Development: Local Docker environment
+Testing: Isolated test environment
+Staging: Production-like environment
+Production: Live environment
+
+Future Considerations
+Planned Improvements
+
+Microservices Migration (if applicable)
+
+Service decomposition strategy
+API gateway implementation
+Service mesh consideration
+
+
+Performance Enhancements
+
+GraphQL query optimization
+Advanced caching strategies
+Database sharding
+
+
+Feature Additions
+
+Real-time collaboration
+Advanced analytics
+Machine learning integration
+
+
+
+Technology Updates
+
+Regular Django version updates
+Security patch management
+Dependency updates
+Performance monitoring tool upgrades

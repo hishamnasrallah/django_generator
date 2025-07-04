@@ -189,19 +189,15 @@ Use `-` prefix for descending order.
 
 API requests are rate-limited to prevent abuse:
 
-{%- if project.api_settings is defined %}
-{%- if project.api_settings.anon_rate_limit is defined %}
-- Anonymous users: {{ project.api_settings.anon_rate_limit }}
+{%- set api_settings = project.get('api_settings', {}) %}
+{%- if api_settings.get('anon_rate_limit') %}
+- Anonymous users: {{ api_settings.get('anon_rate_limit') }}
 {%- else %}
 - Anonymous users: 100 requests/hour
 {%- endif %}
-{%- if project.api_settings.user_rate_limit is defined %}
-- Authenticated users: {{ project.api_settings.user_rate_limit }}
+{%- if api_settings.get('user_rate_limit') %}
+- Authenticated users: {{ api_settings.get('user_rate_limit') }}
 {%- else %}
-- Authenticated users: 1000 requests/hour
-{%- endif %}
-{%- else %}
-- Anonymous users: 100 requests/hour
 - Authenticated users: 1000 requests/hour
 {%- endif %}
 

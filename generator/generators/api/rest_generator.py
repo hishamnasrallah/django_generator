@@ -147,7 +147,6 @@ class RestAPIGenerator(BaseGenerator):
             'apps': schema['apps'],
             'has_versioning': schema.get('features', {}).get('api', {}).get('versioning', False),
         }
-
         self.create_file_from_template(
             'api/urls.py.j2',
             'api/urls.py',

@@ -10,7 +10,7 @@ from django.utils import timezone
 {% if features.enterprise.multitenancy %}
 from django_tenants.utils import get_tenant
 {% endif %}
-{% if features.monitoring.sentry %}
+{% if features.get('monitoring', {}).get('sentry') %}
 import sentry_sdk
 {% endif %}
 
@@ -65,7 +65,7 @@ class ErrorLoggingMiddleware:
                 }
             )
 
-            {% if features.monitoring.sentry %}
+            {% if features.get('monitoring', {}).get('sentry') %}
             sentry_sdk.capture_exception(e)
             {% endif %}
 

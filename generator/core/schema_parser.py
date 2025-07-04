@@ -46,7 +46,7 @@ class FieldOptions(BaseModel):
 
 class FieldDefinition(BaseModel):
     """Model field definition."""
-    name: constr(regex=r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+    name: constr(pattern=r'^[a-zA-Z_][a-zA-Z0-9_]*$')
     type: str
     to: Optional[str] = None  # For relationship fields
     through: Optional[str] = None  # For M2M with through model
@@ -137,9 +137,9 @@ class ModelMeta(BaseModel):
 
 class BusinessMethod(BaseModel):
     """Business logic method definition."""
-    name: constr(regex=r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+    name: constr(pattern=r'^[a-zA-Z_][a-zA-Z0-9_]*$')
     description: Optional[str] = None
-    params: List[str] = []
+    params: List[str] = ()
     returns: Optional[str] = None
     implementation: str
     decorator: Optional[str] = None  # e.g., @property, @cached_property
@@ -150,7 +150,7 @@ class BusinessMethod(BaseModel):
 
 class StateTransition(BaseModel):
     """State machine transition definition."""
-    name: constr(regex=r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+    name: constr(pattern=r'^[a-zA-Z_][a-zA-Z0-9_]*$')
     source: Union[str, List[str]]  # Source state(s)
     target: str  # Target state
     permission: Optional[str] = None
@@ -188,7 +188,7 @@ class ModelFeatures(BaseModel):
 
 class ModelDefinition(BaseModel):
     """Complete model definition."""
-    name: constr(regex=r'^[A-Z][a-zA-Z0-9]*$')  # PascalCase
+    name: constr(pattern=r'^[A-Z][a-zA-Z0-9]*$')  # PascalCase
     description: Optional[str] = None
     fields: List[FieldDefinition]
     meta: Optional[ModelMeta] = None
@@ -213,7 +213,7 @@ class ModelDefinition(BaseModel):
 
 class AppDefinition(BaseModel):
     """Django app definition."""
-    name: constr(regex=r'^[a-z][a-z0-9_]*$')  # snake_case
+    name: constr(pattern=r'^[a-z][a-z0-9_]*$')  # snake_case
     description: Optional[str] = None
     models: List[ModelDefinition]
     services: Optional[List[dict]] = None
@@ -235,7 +235,7 @@ class AppDefinition(BaseModel):
 
 class ProjectSettings(BaseModel):
     """Project configuration settings."""
-    name: constr(regex=r'^[a-z][a-z0-9_]*$')
+    name: constr(pattern=r'^[a-z][a-z0-9_]*$')
     description: Optional[str] = None
     version: str = "1.0.0"
     python_version: str = "3.11"

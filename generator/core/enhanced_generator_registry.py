@@ -39,7 +39,7 @@ class GeneratorMetadata:
 class EnhancedGeneratorRegistry:
     """
     Enhanced generator registry with advanced features.
-
+    
     Features:
     - Automatic generator discovery
     - Dependency resolution with topological sorting
@@ -77,7 +77,7 @@ class EnhancedGeneratorRegistry:
     def discover_generators(self, additional_paths: Optional[List[str]] = None) -> None:
         """
         Discover all available generators.
-
+        
         Args:
             additional_paths: Additional paths to search for generators
         """

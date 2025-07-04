@@ -20,9 +20,9 @@ class Create{{ model.name }}Mutation(graphene.Mutation):
     """Create a new {{ model.name }}."""
 
     class Arguments:
-    {% for field in model.fields %}
-    {% if not field.auto_now_add and not field.auto_now and field.name != 'id' %}
-    {{ field.name }} = graphene.{{ field|graphene_type }}({% if field.required %}required=True{% endif %})
+    {% for field in model.get('fields', []) %}
+    {% if not field.get('auto_now_add') and not field.get('auto_now') and field.get('name') != 'id' %}
+    {{ field.get('name') }} = graphene.String({% if field.get('required') %}required=True{% endif %})
     {% endif %}
     {% endfor %}
 
@@ -40,18 +40,19 @@ class Create{{ model.name }}Mutation(graphene.Mutation):
                 instance = {{ model.name }}()
 
                 # Set fields
-                {% for field in model.fields %}
-                {% if not field.auto_now_add and not field.auto_now and field.name != 'id' %}
-                if '{{ field.name }}' in kwargs:
-                {% if field.type == 'ForeignKey' %}
-                    instance.{{ field.name }}_id = kwargs['{{ field.name }}']
+                {% for field in model.get('fields', []) %}
+                {% if not field.get('auto_now_add') and not field.get('auto_now') and field.get('name') != 'id' %}
+                if '{{ field.get('name') }}' in kwargs:
+                {% if field.get('type') == 'ForeignKey' %}
+                    instance.{{ field.get('name') }}_id = kwargs['{{ field.get('name') }}']
                     {% else %}
-                    instance.{{ field.name }} = kwargs['{{ field.name }}']
+                    instance.{{ field.get('name') }} = kwargs['{{ field.get('name') }}']
                 {% endif %}
                 {% endif %}
                 {% endfor %}
 
-                {% if model.features and model.features.audit %}
+                {% set model_features = model.get('features', {}) if model else {} %}
+                {% if model_features.get('audit') %}
                 # Set audit fields
                 instance.created_by = info.context.user
                 {% endif %}
@@ -60,11 +61,11 @@ class Create{{ model.name }}Mutation(graphene.Mutation):
                 instance.full_clean()
                 instance.save()
 
-                {% for field in model.fields %}
-                {% if field.type == 'ManyToManyField' %}
+                {% for field in model.get('fields', []) %}
+                {% if field.get('type') == 'ManyToManyField' %}
                 # Handle many-to-many relationships
-                if '{{ field.name }}' in kwargs:
-                    instance.{{ field.name }}.set(kwargs['{{ field.name }}'])
+                if '{{ field.get('name') }}' in kwargs:
+                    instance.{{ field.get('name') }}.set(kwargs['{{ field.get('name') }}'])
                 {% endif %}
                 {% endfor %}
 
@@ -89,9 +90,9 @@ class Create{{ model.name }}Mutation(graphene.Mutation):
 
         class Arguments:
             id = graphene.ID(required=True)
-            {% for field in model.fields %}
-            {% if not field.auto_now_add and not field.auto_now and field.name != 'id' %}
-            {{ field.name }} = graphene.{{ field|graphene_type }}()
+            {% for field in model.get('fields', []) %}
+            {% if not field.get('auto_now_add') and not field.get('auto_now') and field.get('name') != 'id' %}
+            {{ field.get('name') }} = graphene.String()
     {% endif %}
     {% endfor %}
 
@@ -113,21 +114,22 @@ class Create{{ model.name }}Mutation(graphene.Mutation):
                     raise PermissionError("You don't have permission to update this {{ model.name }}.")
 
                 # Update fields
-                {% for field in model.fields %}
-                {% if not field.auto_now_add and not field.auto_now and field.name != 'id' %}
-                if '{{ field.name }}' in kwargs:
-                {% if field.type == 'ForeignKey' %}
-                    instance.{{ field.name }}_id = kwargs['{{ field.name }}']
-                    {% elif field.type == 'ManyToManyField' %}
+                {% for field in model.get('fields', []) %}
+                {% if not field.get('auto_now_add') and not field.get('auto_now') and field.get('name') != 'id' %}
+                if '{{ field.get('name') }}' in kwargs:
+                {% if field.get('type') == 'ForeignKey' %}
+                    instance.{{ field.get('name') }}_id = kwargs['{{ field.get('name') }}']
+                    {% elif field.get('type') == 'ManyToManyField' %}
                     # Handle M2M separately after save
                     pass
                     {% else %}
-                    instance.{{ field.name }} = kwargs['{{ field.name }}']
+                    instance.{{ field.get('name') }} = kwargs['{{ field.get('name') }}']
                 {% endif %}
                 {% endif %}
                 {% endfor %}
 
-                {% if model.features and model.features.audit %}
+                {% set model_features = model.get('features', {}) if model else {} %}
+                {% if model_features.get('audit') %}
                 # Set audit fields
                 instance.updated_by = info.context.user
                 {% endif %}
@@ -136,11 +138,11 @@ class Create{{ model.name }}Mutation(graphene.Mutation):
                 instance.full_clean()
                 instance.save()
 
-                {% for field in model.fields %}
-                {% if field.type == 'ManyToManyField' %}
+                {% for field in model.get('fields', []) %}
+                {% if field.get('type') == 'ManyToManyField' %}
                 # Update many-to-many relationships
-                if '{{ field.name }}' in kwargs:
-                    instance.{{ field.name }}.set(kwargs['{{ field.name }}'])
+                if '{{ field.get('name') }}' in kwargs:
+                    instance.{{ field.get('name') }}.set(kwargs['{{ field.get('name') }}'])
                 {% endif %}
                 {% endfor %}
 
@@ -184,7 +186,8 @@ class Create{{ model.name }}Mutation(graphene.Mutation):
                 if not info.context.user.has_perm('{{ app_name }}.delete_{{ model.name|lower }}'):
                     raise PermissionError("You don't have permission to delete this {{ model.name }}.")
 
-                {% if model.features and model.features.soft_delete %}
+                {% set model_features = model.get('features', {}) if model else {} %}
+                {% if model_features.get('soft_delete') %}
                 # Soft delete
                 instance.is_deleted = True
                 instance.save()
@@ -207,26 +210,28 @@ class Create{{ model.name }}Mutation(graphene.Mutation):
                 )
 
 
-    {% if model.api and model.api.custom_mutations %}
+    {% set model_api = model.get('api', {}) if model else {} %}
+    {% if model_api.get('custom_mutations') %}
     # Custom mutations for {{ model.name }}
-    {% for mutation in model.api.custom_mutations %}
-    class {{ mutation.name }}(graphene.Mutation):
-        """{{ mutation.description }}"""
+    {% for mutation in model_api.get('custom_mutations', []) %}
+    class {{ mutation.get('name', 'CustomMutation') }}(graphene.Mutation):
+        """{{ mutation.get('description', 'Custom mutation') }}"""
 
         class Arguments:
-        {% for arg in mutation.arguments %}
-        {{ arg.name }} = graphene.{{ arg.type }}({% if arg.required %}required=True{% endif %})
+        {% for arg in mutation.get('arguments', []) %}
+        {{ arg.get('name', 'arg') }} = graphene.{{ arg.get('type', 'String') }}({% if arg.get('required') %}required=True{% endif %})
         {% endfor %}
 
-        {% for output in mutation.outputs %}
-        {{ output.name }} = graphene.{{ output.type }}()
+        {% for output in mutation.get('outputs', []) %}
+        {{ output.get('name', 'result') }} = graphene.{{ output.get('type', 'String') }}()
         {% endfor %}
         success = graphene.Boolean()
         message = graphene.String()
 
-        {% if mutation.login_required %}@login_required
-        {% endif %}def mutate(self, info, **kwargs):
-    {{ mutation.implementation|indent(8) }}
+        {% if mutation.get('login_required', True) %}@login_required
+        {% endif %}
+        def mutate(self, info, **kwargs):
+    {{ mutation.get('implementation', 'pass')|indent(8) }}
 
 
     {% endfor %}
@@ -236,10 +241,10 @@ class Create{{ model.name }}Mutation(graphene.Mutation):
     {% if has_file_uploads %}
     # File upload mutations
     {% for model in models %}
-    {% for field in model.fields %}
-    {% if field.type in ['FileField', 'ImageField'] %}
-    class Upload{{ model.name }}{{ field.name|title }}Mutation(graphene.Mutation):
-        """Upload {{ field.name }} for {{ model.name }}."""
+    {% for field in model.get('fields', []) %}
+    {% if field.get('type') in ['FileField', 'ImageField'] %}
+    class Upload{{ model.name }}{{ field.get('name')|title }}Mutation(graphene.Mutation):
+        """Upload {{ field.get('name') }} for {{ model.name }}."""
 
         class Arguments:
             id = graphene.ID(required=True)
@@ -259,17 +264,17 @@ class Create{{ model.name }}Mutation(graphene.Mutation):
                     raise PermissionError("You don't have permission to update this {{ model.name }}.")
 
                 # Save file
-                instance.{{ field.name }} = file
+                instance.{{ field.get('name') }} = file
                 instance.save()
 
-                return Upload{{ model.name }}{{ field.name|title }}Mutation(
+                return Upload{{ model.name }}{{ field.get('name')|title }}Mutation(
                 {{ model.name|lower }}=instance,
                 success=True,
                 message="File uploaded successfully."
                 )
 
                 except {{ model.name }}.DoesNotExist:
-                return Upload{{ model.name }}{{ field.name|title }}Mutation(
+                return Upload{{ model.name }}{{ field.get('name')|title }}Mutation(
                 {{ model.name|lower }}=None,
                 success=False,
                 message="{{ model.name }} not found."
@@ -283,7 +288,8 @@ class Create{{ model.name }}Mutation(graphene.Mutation):
 
         # Bulk mutations
         {% for model in models %}
-        {% if model.api and model.api.allow_bulk %}
+        {% set model_api = model.get('api', {}) if model else {} %}
+        {% if model_api.get('allow_bulk') %}
         class BulkCreate{{ model.name }}Mutation(graphene.Mutation):
             """Bulk create {{ model.name }} objects."""
 
@@ -364,7 +370,8 @@ class Create{{ model.name }}Mutation(graphene.Mutation):
                 def mutate(self, info, ids):
                     try:
                         queryset = {{ model.name }}.objects.filter(id__in=ids)
-                        {% if model.features and model.features.soft_delete %}
+                        {% set model_features = model.get('features', {}) if model else {} %}
+                        {% if model_features.get('soft_delete') %}
                         # Soft delete
                         deleted_count = queryset.update(is_deleted=True)
                         message = f"Soft deleted {deleted_count} {{ model.name }} objects."
@@ -400,22 +407,23 @@ class Create{{ model.name }}Mutation(graphene.Mutation):
                 update_{{ model.name|lower }} = Update{{ model.name }}Mutation.Field()
                 delete_{{ model.name|lower }} = Delete{{ model.name }}Mutation.Field()
 
-                {% if model.api and model.api.custom_mutations %}
+                {% set model_api = model.get('api', {}) if model else {} %}
+                {% if model_api.get('custom_mutations') %}
                 # Custom mutations
-                {% for mutation in model.api.custom_mutations %}
-                {{ mutation.name|snake_case }} = {{ mutation.name }}.Field()
+                {% for mutation in model_api.get('custom_mutations', []) %}
+                {{ mutation.get('name', 'custom_mutation')|lower }} = {{ mutation.get('name', 'CustomMutation') }}.Field()
             {% endfor %}
             {% endif %}
 
             {% if has_file_uploads %}
-            {% for field in model.fields %}
-            {% if field.type in ['FileField', 'ImageField'] %}
-            upload_{{ model.name|lower }}_{{ field.name }} = Upload{{ model.name }}{{ field.name|title }}Mutation.Field()
+            {% for field in model.get('fields', []) %}
+            {% if field.get('type') in ['FileField', 'ImageField'] %}
+            upload_{{ model.name|lower }}_{{ field.get('name') }} = Upload{{ model.name }}{{ field.get('name')|title }}Mutation.Field()
             {% endif %}
             {% endfor %}
             {% endif %}
 
-            {% if model.api and model.api.allow_bulk %}
+            {% if model_api.get('allow_bulk') %}
             # Bulk operations
             bulk_create_{{ model.name|lower }} = BulkCreate{{ model.name }}Mutation.Field()
             bulk_update_{{ model.name|lower }} = BulkUpdate{{ model.name }}Mutation.Field()

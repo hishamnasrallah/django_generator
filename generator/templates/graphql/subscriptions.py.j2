@@ -14,7 +14,7 @@ from .types import {{ types|map(attribute='name')|join(', ') }}
 
 
 {% for model in models %}
-{% if model.get('graphql', {}).get('subscriptions', False) %}
+{% if model and model.get('graphql', {}).get('subscriptions', False) %}
 class {{ model.name }}Subscription(channels_graphql_ws.Subscription):
     """Subscriptions for {{ model.name }} model."""
 

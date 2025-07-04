@@ -414,7 +414,7 @@ class ProjectStructureGenerator(BaseGenerator):
 
         # .dockerignore
         self.create_file_from_template(
-            'project/docker/dockerignore.j2',
+            'project/docker/.dockerignore.j2',
             '.dockerignore',
             ctx
         )

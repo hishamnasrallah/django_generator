@@ -213,17 +213,19 @@ class GraphQLGenerator(BaseGenerator):
         fields = []
 
         for field in model.get('fields', []):
-            if field['type'] in filterable_types and not field.get('auto_now_add'):
-                fields.append(field['name'])
+            if field and field.get('type') in filterable_types and not field.get('auto_now_add'):
+                field_name = field.get('name')
+                if field_name:
+                    fields.append(field_name)
 
         return fields
 
     def _has_subscriptions(self, app: Dict[str, Any]) -> bool:
         """Check if app needs subscriptions."""
         return (
-                app.get('graphql', {}).get('subscriptions', False) or
-                any(model.get('graphql', {}).get('subscriptions', False)
-                    for model in app.get('models', []))
+                (app and app.get('graphql', {}).get('subscriptions', False)) or
+                (app and any(model and model.get('graphql', {}).get('subscriptions', False)
+                             for model in app.get('models', [])))
         )
 
     def _has_file_uploads(self, models: List[Dict[str, Any]]) -> bool:

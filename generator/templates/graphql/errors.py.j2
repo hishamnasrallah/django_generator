@@ -7,9 +7,10 @@ import logging
 from django.core.exceptions import ValidationError, PermissionDenied, ObjectDoesNotExist
 from django.db import IntegrityError
 from graphql import GraphQLError
-{% if features.monitoring.sentry %}
+from django.conf import settings
+{%- if features.get('monitoring', {}).get('sentry') %}
 import sentry_sdk
-{% endif %}
+{%- endif %}
 
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,7 @@ def format_error(error):
             }
         )
 
-        {% if features.monitoring.sentry %}
+        {% if features.get('monitoring', {}).get('sentry') %}
         # Send to Sentry
         if not isinstance(original, (ValidationError, PermissionDenied, ObjectDoesNotExist)):
             sentry_sdk.capture_exception(original)
@@ -138,7 +139,7 @@ def handle_errors(func):
             raise GraphQLNotFoundError(str(e) or 'Resource not found')
         except Exception as e:
             logger.error(f'Unhandled error in resolver: {str(e)}', exc_info=True)
-            {% if features.monitoring.sentry %}
+            {% if features.get('monitoring', {}).get('sentry') %}
             sentry_sdk.capture_exception(e)
             {% endif %}
 

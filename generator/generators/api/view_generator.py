@@ -85,7 +85,7 @@ class ViewGenerator(BaseGenerator):
         view_config = self._analyze_view_requirements(app, schema)
 
         # Ensure view_config is never None and has all required keys
-        if not view_config:
+        if view_config is None:
             view_config = {}
 
         view_config.setdefault('viewsets', {})
@@ -95,12 +95,12 @@ class ViewGenerator(BaseGenerator):
 
         # Prepare context with safe defaults
         ctx = {
-            'app_name': app_name,
-            'models': valid_models,
-            'project': schema.get('project', {}),
-            'features': schema.get('features', {}),
-            'view_config': view_config,
-            'imports': self._get_required_imports(valid_models, schema, view_config),
+            'app_name': app_name or '',
+            'models': valid_models or [],
+            'project': schema.get('project', {}) or {},
+            'features': schema.get('features', {}) or {},
+            'view_config': view_config or {},
+            'imports': self._get_required_imports(valid_models, schema, view_config) or {},
             'has_custom_actions': False,
             'has_filters': False,
             'has_search': False,
@@ -172,8 +172,8 @@ class ViewGenerator(BaseGenerator):
         if not app or not schema:
             return config
 
-        features = schema.get('features', {})
-        models = app.get('models', [])
+        features = schema.get('features', {}) or {}
+        models = app.get('models', []) or []
 
         if not models:
             return config

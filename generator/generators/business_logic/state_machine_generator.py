@@ -103,7 +103,7 @@ class StateMachineGenerator(BaseGenerator):
 
         # Create directories
         self.create_directory(f'apps/{app_name}/state_machines')
-        self.create_file(f'apps/{app_name}/workflows/__init__.py', '')
+        self.create_file(f'apps/{app_name}/state_machines/__init__.py', '')
 
         # Prepare context
         ctx = {
@@ -116,22 +116,22 @@ class StateMachineGenerator(BaseGenerator):
 
         # Generate main state machine file
         self.create_file_from_template(
-            'business_logic/workflows/machines.py.j2',
-            f'apps/{app_name}/workflows/machines.py',
+            'business_logic/state_machines/machines.py.j2',
+            f'apps/{app_name}/state_machines/machines.py',
             ctx
         )
 
         # Generate transition handlers
         self.create_file_from_template(
-            'business_logic/workflows/handlers.py.j2',
-            f'apps/{app_name}/workflows/handlers.py',
+            'business_logic/state_machines/handlers.py.j2',
+            f'apps/{app_name}/state_machines/handlers.py',
             ctx
         )
 
         # Generate state machine mixins
         self.create_file_from_template(
-            'business_logic/workflows/mixins.py.j2',
-            f'apps/{app_name}/workflows/mixins.py',
+            'business_logic/state_machines/mixins.py.j2',
+            f'apps/{app_name}/state_machines/mixins.py',
             ctx
         )
 

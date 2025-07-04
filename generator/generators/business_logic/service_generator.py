@@ -1,291 +1,250 @@
 """
-Service Generator
-Generates business logic service layer
+Service Layer Generator
+Generates service layer with business logic
 """
 from typing import Dict, Any, List, Optional
 from pathlib import Path
-import logging
-
 from ...core.base_generator import BaseGenerator, GeneratedFile
 from ...utils.naming_conventions import NamingConventions
-
-logger = logging.getLogger(__name__)
 
 
 class ServiceGenerator(BaseGenerator):
     """
     Generates service layer with:
-    - Service classes
-    - DTOs (Data Transfer Objects)
-    - Repository pattern
-    - Business logic encapsulation
+    - Service classes for business logic
+    - Repository pattern implementation
+    - Domain events
+    - Business rule validation
+    - Transaction management
     """
 
     name = "ServiceGenerator"
-    description = "Generates business logic service layer"
+    description = "Generates service layer components"
     version = "1.0.0"
-    order = 60
-    category = "business_logic"
+    order = 65
     requires = {'ModelGenerator'}
-    provides = {'ServiceGenerator', 'services'}
-    tags = {'services', 'business_logic', 'architecture'}
 
     def can_generate(self, schema: Dict[str, Any]) -> bool:
-        """Check if schema needs service layer."""
-        if not schema or not isinstance(schema, dict):
-            return False
-
-        # Check if service layer is enabled
-        architecture = schema.get('architecture', {})
-        if not architecture.get('patterns', {}).get('service_layer', True):
-            return False
-
-        # Check if any app has models that need services
-        apps = schema.get('apps', [])
-        for app in apps:
-            if app and isinstance(app, dict):
-                models = app.get('models', [])
-                for model in models:
-                    if model and isinstance(model, dict):
-                        if model.get('services', {}).get('enabled', True):
-                            return True
-
-        return False
+        """Check if service layer is needed."""
+        return schema.get('features', {}).get('service_layer', False)
 
     def generate(self, schema: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> List[GeneratedFile]:
         """Generate service layer files."""
         self.generated_files = []
 
-        if not schema:
-            logger.error("Schema is None or empty")
-            return self.generated_files
+        # Create service directories
+        self._create_service_directories(schema)
 
-        apps = schema.get('apps', [])
-        if not apps:
-            logger.warning("No apps found in schema")
-            return self.generated_files
+        # Generate base service components
+        self._generate_base_services(schema)
 
-        for app in apps:
-            if not app or not isinstance(app, dict):
-                logger.warning("Skipping invalid app entry")
-                continue
-
-            if self._should_generate_services(app, schema):
+        # Generate app-specific services
+        for app in schema.get('apps', []):
+            if app.get('models'):
                 self._generate_app_services(app, schema)
+
+        # Generate domain events if needed
+        if schema.get('features', {}).get('service_layer', {}).get('domain_events'):
+            self._generate_domain_events(schema)
 
         return self.generated_files
 
-    def _should_generate_services(self, app: Dict[str, Any], schema: Dict[str, Any]) -> bool:
-        """Check if services should be generated for this app."""
-        models = app.get('models', [])
-        if not models:
-            return False
-
-        # Check if any model needs services
-        for model in models:
-            if model and isinstance(model, dict):
-                services_config = model.get('services', {})
-                if services_config.get('enabled', True):
-                    return True
-
-        return False
-
-    def _generate_app_services(self, app: Dict[str, Any], schema: Dict[str, Any]) -> None:
-        """Generate service layer for a single app."""
-        app_name = app.get('name')
-        if not app_name:
-            logger.error("App missing 'name' field")
-            return
-
-        # Create service directories
-        service_dirs = [
-            f'apps/{app_name}/services',
-            f'apps/{app_name}/dto',
-            f'apps/{app_name}/repositories',
+    def _create_service_directories(self, schema: Dict[str, Any]) -> None:
+        """Create service layer directory structure."""
+        directories = [
+            'core/services',
+            'core/repositories',
+            'core/domain',
+            'core/domain/events',
+            'core/domain/exceptions',
         ]
 
-        for dir_path in service_dirs:
-            self.create_directory(dir_path)
-            self.create_file(f"{dir_path}/__init__.py", "")
-
-        # Get models that need services
-        service_models = []
-        for model in app.get('models', []):
-            if model and isinstance(model, dict):
-                services_config = model.get('services', {})
-                if services_config.get('enabled', True):
-                    # Enhance service config
-                    model['services'] = self._enhance_service_config(model, services_config)
-                    service_models.append(model)
-
-        if not service_models:
-            return
-
-        # Prepare context
-        ctx = {
-            'app_name': app_name,
-            'models': service_models,
-            'features': schema.get('features', {}),
-            'imports': self._get_required_imports(service_models, schema),
-        }
-
-        # Generate DTOs
-        self.create_file_from_template(
-            'business_logic/services/dto.py.j2',
-            f'apps/{app_name}/dto/dto.py',
-            ctx
-        )
-
-        # Generate Repositories
-        ctx['repository_models'] = [m for m in service_models if m.get('repository', {}).get('enabled', True)]
-        if ctx['repository_models']:
+        for directory in directories:
+            # Create __init__.py file in each directory
             self.create_file_from_template(
-                'business_logic/services/repository.py.j2',
-                f'apps/{app_name}/repositories/repository.py',
-                ctx
+                'services/__init__.py.j2',
+                f'{directory}/__init__.py',
+                {}
             )
 
-        # Generate Services
+    def _generate_base_services(self, schema: Dict[str, Any]) -> None:
+        """Generate base service components."""
+        ctx = {
+            'project': schema['project'],
+            'features': schema.get('features', {}),
+        }
+
+        # Base service class
         self.create_file_from_template(
-            'business_logic/services/service.py.j2',
-            f'apps/{app_name}/services/service.py',
+            'services/base_service.py.j2',
+            'core/services/base.py',
             ctx
         )
 
-        # Generate service __init__.py with exports
-        self._generate_service_init(app_name, service_models)
+        # Base repository
+        self.create_file_from_template(
+            'services/base_repository.py.j2',
+            'core/repositories/base.py',
+            ctx
+        )
 
-    def _enhance_service_config(self, model: Dict[str, Any], services_config: Dict[str, Any]) -> Dict[str, Any]:
-        """Enhance service configuration with defaults."""
-        enhanced = services_config.copy()
+        # Service exceptions
+        self.create_file_from_template(
+            'services/exceptions.py.j2',
+            'core/domain/exceptions/__init__.py',
+            ctx
+        )
 
-        # Default custom methods
-        if 'custom_methods' not in enhanced:
-            enhanced['custom_methods'] = []
+        # Service decorators
+        self.create_file_from_template(
+            'services/decorators.py.j2',
+            'core/services/decorators.py',
+            ctx
+        )
 
-        # Add common service methods based on model features
-        if model.get('features', {}).get('soft_delete'):
-            enhanced['custom_methods'].append({
-                'name': 'restore',
-                'params': ['id: int'],
-                'return_type': 'bool',
-                'description': f'Restore soft-deleted {model["name"]}',
-                'implementation': 'return self.repository.restore(id)'
-            })
+        # Transaction manager
+        self.create_file_from_template(
+            'services/transaction.py.j2',
+            'core/services/transaction.py',
+            ctx
+        )
 
-        if model.get('features', {}).get('versioning'):
-            enhanced['custom_methods'].append({
-                'name': 'get_version_history',
-                'params': ['id: int'],
-                'return_type': 'List[Dict[str, Any]]',
-                'description': f'Get version history for {model["name"]}',
-                'implementation': 'return self.repository.get_version_history(id)'
-            })
+    def _generate_app_services(self, app: Dict[str, Any], schema: Dict[str, Any]) -> None:
+        """Generate services for an app."""
+        app_name = app['name']
 
-        # Default bulk operations
-        if 'bulk_operations' not in enhanced:
-            enhanced['bulk_operations'] = True
+        # Create app service directory
+        self.create_file_from_template(
+            'services/__init__.py.j2',
+            f'apps/{app_name}/services/__init__.py',
+            {'app_name': app_name}
+        )
 
-        # Default repository config
-        if 'repository' not in model:
-            model['repository'] = {
-                'enabled': True,
-                'cache_enabled': model.get('features', {}).get('caching', False),
-                'custom_methods': []
-            }
+        # Create app repository directory
+        self.create_file_from_template(
+            'services/__init__.py.j2',
+            f'apps/{app_name}/repositories/__init__.py',
+            {'app_name': app_name}
+        )
 
-        # Add model-specific configurations
-        enhanced['list_display_fields'] = enhanced.get('list_display_fields', self._get_list_fields(model))
-        enhanced['filterable_fields'] = enhanced.get('filterable_fields', self._get_filterable_fields(model))
+        # Generate service for each model
+        for model in app.get('models', []):
+            self._generate_model_service(model, app, schema)
+            self._generate_model_repository(model, app, schema)
 
-        return enhanced
+        # Generate app-level service
+        self._generate_app_level_service(app, schema)
 
-    def _get_list_fields(self, model: Dict[str, Any]) -> List[str]:
-        """Get fields suitable for list display."""
-        fields = ['id']
-
-        # Add common display fields
-        field_names = [f.get('name') for f in model.get('fields', []) if f and isinstance(f, dict)]
-        for field_name in ['name', 'title', 'code', 'status', 'created_at']:
-            if field_name in field_names:
-                fields.append(field_name)
-
-        return fields[:5]  # Limit to 5 fields
-
-    def _get_filterable_fields(self, model: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Get fields suitable for filtering."""
-        filterable = []
-
-        for field in model.get('fields', []):
-            if field and isinstance(field, dict):
-                field_type = field.get('type')
-                field_name = field.get('name')
-
-                if field_type in ['CharField', 'TextField', 'EmailField']:
-                    filterable.append({
-                        'name': field_name,
-                        'type': field_type,
-                        'lookups': ['exact', 'icontains']
-                    })
-                elif field_type in ['IntegerField', 'DecimalField', 'FloatField']:
-                    filterable.append({
-                        'name': field_name,
-                        'type': field_type,
-                        'lookups': ['exact', 'gte', 'lte']
-                    })
-                elif field_type in ['DateField', 'DateTimeField']:
-                    filterable.append({
-                        'name': field_name,
-                        'type': field_type,
-                        'lookups': ['exact', 'gte', 'lte']
-                    })
-                elif field_type == 'BooleanField':
-                    filterable.append({
-                        'name': field_name,
-                        'type': field_type,
-                        'lookups': ['exact']
-                    })
-
-        return filterable
-
-    def _get_required_imports(self, models: List[Dict[str, Any]], schema: Dict[str, Any]) -> Dict[str, List[str]]:
-        """Get required imports for service layer."""
-        imports = {
-            'django': [],
-            'third_party': [],
-            'project': [],
-            'python': ['from typing import Optional, List, Dict, Any, Tuple'],
+    def _generate_model_service(self, model: Dict[str, Any], app: Dict[str, Any],
+                                schema: Dict[str, Any]) -> None:
+        """Generate service class for a model."""
+        ctx = {
+            'app_name': app['name'],
+            'model': model,
+            'project': schema['project'],
+            'features': schema.get('features', {}),
+            'service_config': self._get_service_config(model),
         }
 
-        features = schema.get('features', {})
+        self.create_file_from_template(
+            'services/model_service.py.j2',
+            f'apps/{app["name"]}/services/{model["name"].lower()}_service.py',
+            ctx
+        )
 
-        if features.get('celery', {}).get('enabled'):
-            imports['third_party'].append('from celery import shared_task')
+    def _generate_model_repository(self, model: Dict[str, Any], app: Dict[str, Any],
+                                   schema: Dict[str, Any]) -> None:
+        """Generate repository class for a model."""
+        ctx = {
+            'app_name': app['name'],
+            'model': model,
+            'project': schema['project'],
+            'features': schema.get('features', {}),
+        }
 
-        if features.get('notifications', {}).get('enabled'):
-            imports['project'].append('from ..notifications import NotificationService')
+        self.create_file_from_template(
+            'services/model_repository.py.j2',
+            f'apps/{app["name"]}/repositories/{model["name"].lower()}_repository.py',
+            ctx
+        )
 
-        if features.get('audit', {}).get('enabled'):
-            imports['project'].append('from ..audit import AuditService')
+    def _generate_app_level_service(self, app: Dict[str, Any], schema: Dict[str, Any]) -> None:
+        """Generate app-level service orchestrating multiple model services."""
+        ctx = {
+            'app': app,
+            'project': schema['project'],
+            'features': schema.get('features', {}),
+        }
 
-        return imports
+        self.create_file_from_template(
+            'services/app_service.py.j2',
+            f'apps/{app["name"]}/services/{app["name"]}_service.py',
+            ctx
+        )
 
-    def _generate_service_init(self, app_name: str, models: List[Dict[str, Any]]) -> None:
-        """Generate __init__.py for services module."""
-        content = f'"""Services for {app_name} app."""\n\n'
+    def _generate_domain_events(self, schema: Dict[str, Any]) -> None:
+        """Generate domain event infrastructure."""
+        ctx = {
+            'project': schema['project'],
+            'features': schema.get('features', {}),
+            'apps': schema['apps'],
+        }
 
-        # Import statements
-        content += 'from .service import (\n'
-        for model in models:
-            content += f'    {model["name"]}Service,\n'
-        content += f'    {NamingConventions.to_pascal_case(app_name)}ServiceFacade,\n'
-        content += ')\n\n'
+        # Base event class
+        self.create_file_from_template(
+            'services/domain/base_event.py.j2',
+            'core/domain/events/base.py',
+            ctx
+        )
 
-        # Export list
-        content += '__all__ = [\n'
-        for model in models:
-            content += f'    \'{model["name"]}Service\',\n'
-        content += f'    \'{NamingConventions.to_pascal_case(app_name)}ServiceFacade\',\n'
-        content += ']\n'
+        # Event dispatcher
+        self.create_file_from_template(
+            'services/domain/event_dispatcher.py.j2',
+            'core/domain/events/dispatcher.py',
+            ctx
+        )
 
-        self.create_file(f'apps/{app_name}/services/__init__.py', content)
+        # Event handlers
+        self.create_file_from_template(
+            'services/domain/event_handlers.py.j2',
+            'core/domain/events/handlers.py',
+            ctx
+        )
+
+        # Generate events for each app
+        for app in schema.get('apps', []):
+            if app.get('models'):
+                self._generate_app_events(app, schema)
+
+    def _generate_app_events(self, app: Dict[str, Any], schema: Dict[str, Any]) -> None:
+        """Generate domain events for an app."""
+        ctx = {
+            'app': app,
+            'project': schema['project'],
+            'features': schema.get('features', {}),
+        }
+
+        self.create_file_from_template(
+            'services/domain/app_events.py.j2',
+            f'apps/{app["name"]}/events.py',
+            ctx
+        )
+
+    def _get_service_config(self, model: Dict[str, Any]) -> Dict[str, Any]:
+        """Get service configuration for a model."""
+        config = {
+            'use_repository': True,
+            'use_events': False,
+            'use_cache': False,
+            'business_rules': [],
+        }
+
+        # Check model configuration
+        if model.get('service'):
+            config.update(model['service'])
+
+        # Extract business rules from model
+        if model.get('validation_rules'):
+            config['business_rules'].extend(model['validation_rules'])
+
+        return config
