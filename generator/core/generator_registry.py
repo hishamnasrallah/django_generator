@@ -13,6 +13,49 @@ from .base_generator import BaseGenerator
 from ..config.settings import Settings
 
 
+class GeneratorMetadata:
+    """Metadata for a generator."""
+    
+    def __init__(self, generator_class: Type[BaseGenerator]):
+        self.generator_class = generator_class
+        self.name = generator_class.name
+        self.description = generator_class.description
+        self.version = generator_class.version
+        self.order = generator_class.order
+        self.requires = generator_class.requires
+        self.provides = generator_class.provides
+        self.module = generator_class.__module__
+        self.category = self._determine_category(generator_class)
+    
+    def _determine_category(self, generator_class: Type[BaseGenerator]) -> str:
+        """Determine the category based on the module path."""
+        module = generator_class.__module__
+        if 'api' in module:
+            return 'api'
+        elif 'app' in module:
+            return 'app'
+        elif 'project' in module:
+            return 'project'
+        elif 'auth' in module:
+            return 'auth'
+        elif 'database' in module:
+            return 'database'
+        elif 'testing' in module:
+            return 'testing'
+        elif 'deployment' in module:
+            return 'deployment'
+        elif 'enterprise' in module:
+            return 'enterprise'
+        elif 'integration' in module:
+            return 'integration'
+        elif 'performance' in module:
+            return 'performance'
+        elif 'business_logic' in module:
+            return 'business_logic'
+        else:
+            return 'general'
+
+
 class GeneratorRegistry:
     """
     Registry for all code generators.
@@ -26,7 +69,7 @@ class GeneratorRegistry:
 
     def __init__(self, settings: Optional[Settings] = None):
         self.settings = settings or Settings()
-        self.generators: Dict[str, Type[BaseGenerator]] = {}
+        self.generators: Dict[str, GeneratorMetadata] = {}
         self.instances: Dict[str, BaseGenerator] = {}
         self._discovered = False
 
@@ -80,7 +123,7 @@ class GeneratorRegistry:
                         obj is not BaseGenerator and
                         not name.startswith('_')):
 
-                    self.register(obj)
+                    self.register_class(obj)
 
         except ImportError as e:
             # Module might not exist or have issues
@@ -111,31 +154,36 @@ class GeneratorRegistry:
                             issubclass(obj, BaseGenerator) and
                             obj is not BaseGenerator):
 
-                        self.register(obj)
+                        self.register_class(obj)
 
             except Exception as e:
                 if self.settings.get('debug'):
                     print(f"Warning: Could not load plugin {module_name}: {e}")
 
-    def register(self, generator_class: Type[BaseGenerator]) -> None:
+    def register_class(self, generator_class: Type[BaseGenerator]) -> None:
         """
         Register a generator class.
 
         Args:
             generator_class: Generator class to register
         """
-        name = generator_class.name
+        metadata = GeneratorMetadata(generator_class)
+        name = metadata.name
 
         if name in self.generators:
             # Check if it's the same class
-            if self.generators[name] is generator_class:
+            if self.generators[name].generator_class is generator_class:
                 return
 
             # Warn about duplicate
             if self.settings.get('debug'):
                 print(f"Warning: Duplicate generator name '{name}', replacing with {generator_class}")
 
-        self.generators[name] = generator_class
+        self.generators[name] = metadata
+    
+    def register(self, generator_class: Type[BaseGenerator]) -> None:
+        """Alias for register_class for backward compatibility."""
+        self.register_class(generator_class)
 
     def unregister(self, name: str) -> None:
         """Unregister a generator."""
@@ -157,7 +205,7 @@ class GeneratorRegistry:
 
         # Create instance if not exists
         if name not in self.instances:
-            generator_class = self.generators[name]
+            generator_class = self.generators[name].generator_class
             self.instances[name] = generator_class(self.settings)
 
         return self.instances[name]
@@ -178,7 +226,7 @@ class GeneratorRegistry:
         """
         applicable = []
 
-        for name, generator_class in self.generators.items():
+        for name, metadata in self.generators.items():
             generator = self.get_generator(name)
             if generator and generator.can_generate(schema):
                 applicable.append(generator)
@@ -249,11 +297,9 @@ class GeneratorRegistry:
         """
         provides_map = defaultdict(list)
 
-        for name, generator_class in self.generators.items():
-            generator = self.get_generator(name)
-            if generator:
-                for feature in generator.provides:
-                    provides_map[feature].append(name)
+        for name, metadata in self.generators.items():
+            for feature in metadata.provides:
+                provides_map[feature].append(name)
 
         return dict(provides_map)
 
@@ -267,9 +313,8 @@ class GeneratorRegistry:
         requirements = {}
 
         for name in self.generators:
-            generator = self.get_generator(name)
-            if generator:
-                requirements[name] = generator.requires
+            metadata = self.generators[name]
+            requirements[name] = metadata.requires
 
         return requirements
 
@@ -298,7 +343,7 @@ class GeneratorRegistry:
             for requirement in generator.requires:
                 if requirement not in selected_set:
                     # Check if any selected generator provides this
-                    provided = False
+                    provided = False 
                     for other_name in selected_set:
                         other = self.get_generator(other_name)
                         if other and requirement in other.provides:
@@ -316,15 +361,17 @@ class GeneratorRegistry:
         if not generator:
             return None
 
+        metadata = self.generators[name]
         return {
-            'name': generator.name,
-            'description': generator.description,
-            'version': generator.version,
-            'order': generator.order,
-            'requires': list(generator.requires),
-            'provides': list(generator.provides),
-            'class': generator.__class__.__name__,
-            'module': generator.__class__.__module__,
+            'name': metadata.name,
+            'description': metadata.description,
+            'version': metadata.version,
+            'order': metadata.order,
+            'category': metadata.category,
+            'requires': list(metadata.requires),
+            'provides': list(metadata.provides),
+            'class': metadata.generator_class.__name__,
+            'module': metadata.module,
         }
 
     def list_generators(self) -> List[Dict[str, Any]]:
@@ -332,7 +379,7 @@ class GeneratorRegistry:
         return [
             self.get_generator_info(name)
             for name in sorted(self.generators.keys())
-        ]
+        ] 
 
     def check_conflicts(self, selected_generators: List[str]) -> List[str]:
         """
