@@ -1,0 +1,117 @@
+# Core Django
+Django=={{ django_version }}.*
+django-environ==0.11.2
+python-decouple==3.8
+
+# Database
+{% if features.database.engine == 'postgresql' %}psycopg2-binary==2.9.9
+{% elif features.database.engine == 'mysql' %}mysqlclient==2.2.0
+{% endif %}{% if features.database.read_replica %}django-readonly-fields==1.1.2
+{% endif %}
+
+# Models & ORM
+django-model-utils==4.3.1
+django-extensions==3.2.3
+{% if features.enterprise.soft_delete %}django-safedelete==1.3.1
+{% endif %}{% if features.enterprise.audit %}django-simple-history==3.4.0
+{% endif %}{% if features.enterprise.versioning %}django-reversion==5.0.4
+{% endif %}
+
+{% if features.api.rest_framework %}# REST API
+djangorestframework==3.14.0
+django-cors-headers==4.3.1
+djangorestframework-simplejwt==5.3.0
+drf-spectacular==0.27.0
+django-filter==23.5
+{% if features.api.versioning %}drf-versioning==0.1.0
+{% endif %}{% endif %}
+
+{% if features.api.graphql %}# GraphQL
+graphene-django==3.1.5
+django-graphql-jwt==0.4.0
+{% endif %}
+
+{% if features.api.websockets %}# WebSockets
+channels==4.0.0
+channels-redis==4.1.0
+daphne==4.0.0
+{% endif %}
+
+{% if features.authentication %}# Authentication
+{% if features.authentication.oauth2 %}django-allauth==0.58.2
+{% endif %}{% if features.authentication.two_factor %}django-two-factor-auth==1.15.5
+{% endif %}{% if features.authentication.api_keys %}djangorestframework-api-key==3.0.0
+{% endif %}{% endif %}
+
+# Security
+django-guardian==2.4.0
+django-ratelimit==4.1.0
+django-csp==3.7
+
+# Utilities
+Pillow==10.1.0
+django-crispy-forms==2.1
+crispy-bootstrap5==2023.10
+django-import-export==3.3.3
+django-storages==1.14.2
+
+{% if features.performance.caching %}# Caching
+{% if features.performance.caching.backend == 'redis' %}django-redis==5.4.0
+redis==5.0.1
+{% elif features.performance.caching.backend == 'memcached' %}python-memcached==1.59
+{% endif %}{% endif %}
+
+{% if features.performance.celery %}# Task Queue
+celery==5.3.4
+{% if features.performance.caching.backend == 'redis' %}celery[redis]==5.3.4
+{% else %}celery[rabbitmq]==5.3.4
+{% endif %}django-celery-beat==2.5.0
+django-celery-results==2.5.1
+flower==2.0.1
+{% endif %}
+
+{% if features.performance.elasticsearch %}# Search
+elasticsearch==8.11.0
+elasticsearch-dsl==8.11.0
+django-elasticsearch-dsl==8.0
+{% endif %}
+
+# Monitoring & Logging
+{% if features.deployment.monitoring %}sentry-sdk==1.39.1
+{% endif %}django-debug-toolbar==4.2.0
+django-silk==5.0.4
+
+# Email
+django-anymail==10.2
+
+# Timezone support
+pytz==2023.3.post1
+
+# JSON handling
+orjson==3.9.10
+
+# Validation
+django-phonenumber-field==7.2.0
+phonenumbers==8.13.26
+
+{% if features.integrations %}# External Services
+{% if features.integrations.payment %}stripe==7.8.0
+{% endif %}{% if features.integrations.email %}sendgrid==6.11.0
+{% endif %}{% if features.integrations.sms %}twilio==8.10.3
+{% endif %}{% if features.integrations.storage == 's3' %}boto3==1.34.7
+{% endif %}{% endif %}
+
+{% if features.enterprise.multitenancy %}# Multi-tenancy
+django-tenants==3.5.0
+{% endif %}
+
+# Type checking
+django-stubs==4.2.7
+djangorestframework-stubs==3.14.5
+
+# Code quality
+black==23.12.1
+isort==5.13.2
+flake8==6.1.0
+pylint==3.0.3
+pre-commit==3.6.0
