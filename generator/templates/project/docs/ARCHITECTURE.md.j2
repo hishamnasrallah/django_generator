@@ -1,0 +1,213 @@
+# {{ project_title }} Architecture
+
+## Overview
+
+This document describes the system architecture and design decisions for {{ project_title }}.
+
+## Technology Stack
+
+### Backend
+- **Framework**: Django {{ django_version }}
+- **Language**: Python {{ python_version }}
+- **Database**: {{ features.database.engine | default('PostgreSQL') }}
+{% if features.database.read_replica %}
+- **Read Replicas**: Enabled for scaling read operations
+{% endif %}
+
+{% if features.performance.caching %}
+### Caching
+- **Backend**: {{ features.performance.caching.backend }}
+- **Strategy**: Cache-aside pattern for frequently accessed data
+{% endif %}
+
+{% if features.performance.celery %}
+### Task Queue
+- **Queue**: Celery with {{ features.performance.caching.backend | default('Redis') }} broker
+- **Use Cases**: Background jobs, periodic tasks, email sending
+{% endif %}
+
+{% if features.api %}
+### API Layer
+{% if features.api.rest_framework %}
+- **REST API**: Django REST Framework
+    - Versioning: {{ features.api.versioning | default('URL-based') }}
+    - Authentication: {% if features.authentication.jwt %}JWT{% else %}Session-based{% endif %}
+    - Documentation: OpenAPI/Swagger
+{% endif %}
+{% if features.api.graphql %}
+- **GraphQL**: Graphene-Django
+    - Schema-first approach
+    - Real-time subscriptions support
+{% endif %}
+{% if features.api.websockets %}
+- **WebSockets**: Django Channels
+    - Real-time communication
+    - Async consumer pattern
+{% endif %}
+{% endif %}
+
+## Application Architecture
+
+### Design Patterns
+
+1. **Model-View-Template (MVT)**
+    - Django's implementation of MVC
+    - Clear separation of concerns
+
+2. **Repository Pattern**
+    - Custom managers for data access logic
+    - QuerySet methods for complex queries
+
+3. **Service Layer**
+    - Business logic separated from views
+    - Reusable across different interfaces (API, admin, etc.)
+
+4. **Factory Pattern**
+    - Used in tests for creating test data
+    - Consistent object creation
+
+### Application Structure
+{{ project_name }}/
+├── apps/                    # Django applications
+{% for app in apps %}
+│   ├── {{ app.name }}/
+│   │   ├── models.py       # Data models
+│   │   ├── views.py        # View logic
+│   │   ├── serializers.py  # API serializers
+│   │   ├── urls.py         # URL routing
+│   │   └── tests/          # Application tests
+{% endfor %}
+├── {{ project_name }}/             # Core project files
+│   ├── settings/           # Environment-specific settings
+│   ├── urls.py            # Main URL configuration
+│   └── wsgi.py            # WSGI entry point
+└── requirements/           # Dependency management
+
+### Data Models
+
+{% for app in apps %}
+#### {{ app.name | title }} App
+{% if app.description %}
+{{ app.description }}
+{% endif %}
+
+Models:
+{% for model in app.models %}
+- **{{ model.name }}**: {{ model.description | default(model.name + ' model') }}
+{% endfor %}
+
+{% endfor %}
+
+## Security Architecture
+
+### Authentication & Authorization
+{% if features.authentication.jwt %}
+- JWT-based authentication for API access
+- Token refresh mechanism for security
+{% endif %}
+{% if features.authentication.oauth2 %}
+- OAuth2 integration with: {{ features.authentication.oauth2.providers | join(', ') }}
+{% endif %}
+{% if features.authentication.two_factor %}
+- Two-factor authentication support
+{% endif %}
+- Role-based access control (RBAC)
+- Django's built-in permission system
+
+### Security Measures
+- HTTPS enforcement in production
+- CSRF protection
+- XSS prevention through template escaping
+- SQL injection prevention via ORM
+- Rate limiting on API endpoints
+- Input validation and sanitization
+
+{% if features.performance %}
+## Performance Architecture
+
+### Optimization Strategies
+{% if features.performance.caching %}
+- **Caching**: Multi-level caching strategy
+    - Database query caching
+    - API response caching
+    - Template fragment caching
+{% endif %}
+{% if features.database.read_replica %}
+- **Database Optimization**:
+    - Read replicas for scaling reads
+    - Connection pooling
+    - Query optimization
+{% endif %}
+- **Static File Serving**: CDN integration
+- **Database Indexing**: Strategic indexes on frequently queried fields
+
+### Monitoring
+{% if features.performance.monitoring %}
+- Application Performance Monitoring (APM)
+- Error tracking and alerting
+- Database query analysis
+{% endif %}
+- Health check endpoints
+- Structured logging
+{% endif %}
+
+{% if features.deployment %}
+## Deployment Architecture
+
+{% if features.deployment.docker %}
+### Containerization
+- Docker containers for all services
+- Docker Compose for local development
+- Multi-stage builds for optimized images
+{% endif %}
+
+{% if features.deployment.kubernetes %}
+### Kubernetes
+- Horizontal pod autoscaling
+- Rolling deployments
+- Service mesh integration
+- ConfigMaps and Secrets management
+{% endif %}
+
+### Infrastructure
+- Load balancing
+- Auto-scaling groups
+- Database backups
+- Disaster recovery plan
+{% endif %}
+
+## Scalability Considerations
+
+1. **Horizontal Scaling**
+    - Stateless application design
+    - Session storage in {{ features.performance.caching.backend | default('cache') }}
+    - Load balancer ready
+
+2. **Database Scaling**
+   {% if features.database.read_replica %}
+    - Read replicas for read-heavy workloads
+    {% endif %}
+    - Connection pooling
+    - Query optimization
+
+3. **Caching Strategy**
+    - Cache warming
+    - Cache invalidation patterns
+    - CDN for static assets
+
+## Development Workflow
+
+1. **Version Control**: Git with feature branches
+2. **Code Review**: Pull request workflow
+3. **Testing**: Automated testing pipeline
+4. **CI/CD**: Automated deployment pipeline
+5. **Monitoring**: Continuous monitoring and alerting
+
+## Future Considerations
+
+- Microservices migration path
+- API gateway implementation
+- Event-driven architecture
+- Data lake integration
+
+

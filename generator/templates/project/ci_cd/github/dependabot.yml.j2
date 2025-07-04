@@ -1,0 +1,80 @@
+version: 2
+updates:
+  # Python dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "{{ project.github_username | default('username') }}"
+    assignees:
+      - "{{ project.github_username | default('username') }}"
+    labels:
+      - "dependencies"
+      - "python"
+    ignore:
+      # Ignore major version updates for Django
+      - dependency-name: "django"
+        update-types: ["version-update:semver-major"]
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  {% if features.deployment.docker %}
+  # Docker dependencies
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    reviewers:
+      - "{{ project.github_username | default('username') }}"
+    labels:
+      - "dependencies"
+      - "docker"
+  {% endif %}
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    reviewers:
+      - "{{ project.github_username | default('username') }}"
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  {% if features.deployment.docker %}
+  # Docker Compose
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
+      - "docker-compose"
+  {% endif %}
+
+  # Security updates - check daily
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "02:00"
+    open-pull-requests-limit: 10
+    allow:
+      - dependency-type: "security"
+    labels:
+      - "security"
+      - "urgent"
+    reviewers:
+      - "{{ project.github_username | default('username') }}"
+    assignees:
+      - "{{ project.github_username | default('username') }}"

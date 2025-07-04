@@ -1,0 +1,264 @@
+## Overview
+
+{{ project_title }} provides a comprehensive API for programmatic access to all features.
+
+{% if features.api.rest_framework %}
+## REST API
+
+### Base URL
+- Development: `http://localhost:8000/api/`
+- Production: `https://api.{{ project_name }}.com/`
+
+### Authentication
+
+{% if features.authentication.jwt %}
+#### JWT Authentication
+
+To authenticate, obtain a token pair:
+
+```bash
+POST /api/auth/token/
+Content-Type: application/json
+
+{
+  "username": "your_username",
+  "password": "your_password"
+}
+Response:
+json{
+  "access": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+}
+Use the access token in subsequent requests:
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
+Refresh the token when it expires:
+bashPOST /api/auth/token/refresh/
+Content-Type: application/json
+
+{
+  "refresh": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+}
+{% else %}
+Session Authentication
+Use Django's session authentication for browser-based access.
+{% endif %}
+API Documentation
+Interactive API documentation is available at:
+
+Swagger UI: http://localhost:8000/api/swagger/
+ReDoc: http://localhost:8000/api/redoc/
+
+Endpoints
+{% for app in apps %}
+{{ app.name | title }} Endpoints
+{% for model in app.models %}
+{{ model.name }} Resource
+
+GET /api/{{ app.name }}/{{ model.name | lower }}/ - List all {{ model.name | lower }}s
+POST /api/{{ app.name }}/{{ model.name | lower }}/ - Create a new {{ model.name | lower }}
+GET /api/{{ app.name }}/{{ model.name | lower }}/{id}/ - Retrieve a {{ model.name | lower }}
+PUT /api/{{ app.name }}/{{ model.name | lower }}/{id}/ - Update a {{ model.name | lower }}
+PATCH /api/{{ app.name }}/{{ model.name | lower }}/{id}/ - Partially update a {{ model.name | lower }}
+DELETE /api/{{ app.name }}/{{ model.name | lower }}/{id}/ - Delete a {{ model.name | lower }}
+
+{% endfor %}
+{% endfor %}
+Request & Response Format
+All requests and responses use JSON format.
+Example Request
+bashGET /api/resource/1/
+Authorization: Bearer <token>
+Accept: application/json
+Example Response
+json{
+  "id": 1,
+  "created_at": "2024-01-01T00:00:00Z",
+  "updated_at": "2024-01-01T00:00:00Z",
+  ...
+}
+Pagination
+List endpoints support pagination:
+GET /api/resource/?page=2&page_size=20
+Response includes pagination metadata:
+json{
+  "count": 100,
+  "next": "http://localhost:8000/api/resource/?page=3",
+  "previous": "http://localhost:8000/api/resource/?page=1",
+  "results": [...]
+}
+Filtering & Searching
+Filtering
+GET /api/resource/?status=active&created_after=2024-01-01
+Searching
+GET /api/resource/?search=keyword
+Ordering
+GET /api/resource/?ordering=-created_at,name
+Error Handling
+Error Response Format
+json{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Validation failed",
+    "details": {
+      "field_name": ["Error message"]
+    }
+  }
+}
+Common HTTP Status Codes
+
+200 OK - Successful request
+201 Created - Resource created
+204 No Content - Successful deletion
+400 Bad Request - Invalid request data
+401 Unauthorized - Authentication required
+403 Forbidden - Permission denied
+404 Not Found - Resource not found
+429 Too Many Requests - Rate limit exceeded
+500 Internal Server Error - Server error
+
+Rate Limiting
+API requests are rate limited:
+
+Anonymous users: 100 requests/hour
+Authenticated users: 1000 requests/hour
+
+Rate limit headers are included in responses:
+X-RateLimit-Limit: 1000
+X-RateLimit-Remaining: 999
+X-RateLimit-Reset: 1640995200
+{% endif %}
+{% if features.api.graphql %}
+GraphQL API
+Endpoint
+
+Development: http://localhost:8000/graphql/
+Production: https://api.{{ project_name }}.com/graphql/
+
+GraphQL Playground
+Interactive GraphQL playground available at: http://localhost:8000/graphql/
+Authentication
+{% if features.authentication.jwt %}
+Include JWT token in headers:
+json{
+  "Authorization": "Bearer <token>"
+}
+{% endif %}
+Example Queries
+Query single item
+graphqlquery Get{{ apps[0].models[0].name }}($id: ID!) {
+  {{ apps[0].models[0].name | lower }}(id: $id) {
+    id
+    createdAt
+    updatedAt
+    # ... other fields
+  }
+}
+Query with pagination
+graphqlquery List{{ apps[0].models[0].name }}s($first: Int, $after: String) {
+  {{ apps[0].models[0].name | lower }}s(first: $first, after: $after) {
+    edges {
+      node {
+        id
+        # ... fields
+      }
+    }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+  }
+}
+Example Mutations
+Create
+graphqlmutation Create{{ apps[0].models[0].name }}($input: {{ apps[0].models[0].name }}Input!) {
+  create{{ apps[0].models[0].name }}(input: $input) {
+    {{ apps[0].models[0].name | lower }} {
+      id
+      # ... fields
+    }
+  }
+}
+Update
+graphqlmutation Update{{ apps[0].models[0].name }}($id: ID!, $input: {{ apps[0].models[0].name }}Input!) {
+  update{{ apps[0].models[0].name }}(id: $id, input: $input) {
+    {{ apps[0].models[0].name | lower }} {
+      id
+      # ... fields
+    }
+  }
+}
+Subscriptions
+{% if features.api.websockets %}
+Real-time updates via subscriptions:
+graphqlsubscription {{ apps[0].models[0].name }}Updates {
+  {{ apps[0].models[0].name | lower }}Updated {
+    id
+    # ... fields
+  }
+}
+{% endif %}
+{% endif %}
+{% if features.api.websockets %}
+WebSocket API
+Connection
+javascriptconst ws = new WebSocket('ws://localhost:8000/ws/updates/');
+
+ws.onopen = function(e) {
+  console.log('Connected');
+  ws.send(JSON.stringify({
+    'action': 'subscribe',
+    'filters': {'model': 'resource'}
+  }));
+};
+
+ws.onmessage = function(e) {
+  const data = JSON.parse(e.data);
+  console.log('Update received:', data);
+};
+Message Format
+Subscribe to updates
+json{
+  "action": "subscribe",
+  "filters": {
+    "model": "resource",
+    "user_id": 123
+  }
+}
+Receiving updates
+json{
+  "type": "model_updated",
+  "data": {
+    "id": 1,
+    "model": "resource",
+    "fields": {...}
+  },
+  "timestamp": "2024-01-01T00:00:00Z"
+}
+{% endif %}
+SDK & Client Libraries
+Python Client
+pythonfrom {{ project_name }}_sdk import Client
+
+client = Client(api_key='your_api_key')
+resources = client.resources.list()
+JavaScript/TypeScript Client
+javascriptimport { {{ project_name }}Client } from '{{ project_name }}-sdk';
+
+const client = new {{ project_name }}Client({ apiKey: 'your_api_key' });
+const resources = await client.resources.list();
+Best Practices
+
+Always use HTTPS in production
+Include proper authentication headers
+Handle rate limits gracefully
+Implement retry logic for transient failures
+Validate input before sending requests
+Cache responses when appropriate
+Use pagination for large datasets
+
+Support
+For API support:
+
+Email: api-support@{{ project_name }}.com
+Documentation: https://docs.{{ project_name }}.com
+Status Page: https://status.{{ project_name }}.com

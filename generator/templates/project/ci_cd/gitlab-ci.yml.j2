@@ -1,0 +1,138 @@
+# GitLab CI/CD configuration for {{ project_title }}
+
+variables:
+  PYTHON_VERSION: "{{ python_version }}"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+
+stages:
+  - test
+  - build
+  - deploy
+
+cache:
+  paths:
+    - .cache/pip
+    - venv/
+
+before_script:
+  - python -V
+  - pip install virtualenv
+  - virtualenv venv
+  - source venv/bin/activate
+
+# Test stage
+test:unit:
+  stage: test
+  image: python:{{ python_version }}
+  services:
+    {% if features.database.engine == 'postgresql' %}
+    - postgres:15
+    {% elif features.database.engine == 'mysql' %}
+    - mysql:8.0
+    {% endif %}
+    {% if features.performance.caching and features.performance.caching.backend == 'redis' %}
+    - redis:7
+    {% endif %}
+  variables:
+    {% if features.database.engine == 'postgresql' %}
+    POSTGRES_DB: test_db
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: postgres
+    DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/test_db"
+    {% elif features.database.engine == 'mysql' %}
+    MYSQL_DATABASE: test_db
+    MYSQL_ROOT_PASSWORD: mysql
+    DATABASE_URL: "mysql://root:mysql@mysql:3306/test_db"
+    {% endif %}
+    {% if features.performance.caching and features.performance.caching.backend == 'redis' %}
+    REDIS_URL: "redis://redis:6379/0"
+    {% endif %}
+  script:
+    - pip install -r requirements/testing.txt
+    - python manage.py migrate
+    - coverage run --source='.' manage.py test
+    - coverage report
+    - coverage xml
+  coverage: '/TOTAL.*\s+(\d+\%)/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+
+test:lint:
+  stage: test
+  image: python:{{ python_version }}
+  script:
+    - pip install flake8 pylint black isort
+    - black --check .
+    - isort --check-only .
+    - flake8 .
+    - pylint {{ project_name }}/ apps/
+
+test:security:
+  stage: test
+  image: python:{{ python_version }}
+  script:
+    - pip install safety bandit
+    - safety check
+    - bandit -r {{ project_name }}/ apps/
+
+# Build stage
+build:docker:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE:latest
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE:latest
+  only:
+    - main
+    - develop
+
+# Deploy stages
+deploy:staging:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+  script:
+    - ssh -o StrictHostKeyChecking=no $STAGING_USER@$STAGING_HOST "
+      cd /home/{{ project_name }} &&
+      docker-compose -f docker-compose.staging.yml pull &&
+      docker-compose -f docker-compose.staging.yml up -d &&
+      docker-compose -f docker-compose.staging.yml exec -T web python manage.py migrate --noinput &&
+      docker-compose -f docker-compose.staging.yml exec -T web python manage.py collectstatic --noinput
+      "
+  environment:
+    name: staging
+    url: https://staging.{{ project_name }}.com
+  only:
+    - develop
+
+deploy:production:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+  script:
+    - ssh -o StrictHostKeyChecking=no $PRODUCTION_USER@$PRODUCTION_HOST "
+      cd /home/{{ project_name }} &&
+      docker-compose -f docker-compose.prod.yml pull &&
+      docker-compose -f docker-compose.prod.yml up -d &&
+      docker-compose -f docker-compose.prod.yml exec -T web python manage.py migrate --no

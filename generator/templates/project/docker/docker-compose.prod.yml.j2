@@ -1,0 +1,154 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - static_volume:/app/static:ro
+      - media_volume:/app/media:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - web
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+  web:
+    image: {{ project_name }}:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: gunicorn {{ project_name }}.wsgi:application --bind 0.0.0.0:8000
+    volumes:
+      - static_volume:/app/static
+      - media_volume:/app/media
+      - logs_volume:/app/logs
+    env_file:
+      - .env.prod
+    environment:
+      - DJANGO_SETTINGS_MODULE={{ project_name }}.settings.production
+    depends_on:
+      {% if features.database.engine in ['postgresql', 'mysql'] %}
+      - db
+      {% endif %}
+      {% if features.performance.caching and features.performance.caching.backend == 'redis' %}
+      - redis
+      {% endif %}
+    restart: unless-stopped
+
+  {% if features.database.engine == 'postgresql' %}
+  db:
+    image: postgres:15-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    env_file:
+      - .env.prod
+    restart: unless-stopped
+  {% elif features.database.engine == 'mysql' %}
+  db:
+    image: mysql:8.0
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backups:/backups
+    env_file:
+      - .env.prod
+    restart: unless-stopped
+  {% endif %}
+
+  {% if features.performance.caching and features.performance.caching.backend == 'redis' %}
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+  {% endif %}
+
+  {% if features.performance.celery %}
+  celery:
+    image: {{ project_name }}:latest
+    command: celery -A {{ project_name }} worker -l info --concurrency=4
+    volumes:
+      - logs_volume:/app/logs
+    env_file:
+      - .env.prod
+    environment:
+      - DJANGO_SETTINGS_MODULE={{ project_name }}.settings.production
+    depends_on:
+      - redis
+      - web
+    restart: unless-stopped
+
+  celery-beat:
+    image: {{ project_name }}:latest
+    command: celery -A {{ project_name }} beat -l info
+    volumes:
+      - logs_volume:/app/logs
+    env_file:
+      - .env.prod
+    environment:
+      - DJANGO_SETTINGS_MODULE={{ project_name }}.settings.production
+    depends_on:
+      - redis
+      - celery
+    restart: unless-stopped
+  {% endif %}
+
+  {% if features.performance.monitoring %}
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+  {% endif %}
+
+volumes:
+  {% if features.database.engine == 'postgresql' %}
+  postgres_data:
+  {% elif features.database.engine == 'mysql' %}
+  mysql_data:
+  {% endif %}
+  {% if features.performance.caching and features.performance.caching.backend == 'redis' %}
+  redis_data:
+  {% endif %}
+  static_volume:
+  media_volume:
+  logs_volume:
+  {% if features.performance.monitoring %}
+  prometheus_data:
+  grafana_data:
+  {% endif %}
+
+networks:
+  default:
+    driver: bridge

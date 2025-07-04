@@ -1,0 +1,188 @@
+version: '3.8'
+
+services:
+  {% if features.database.engine == 'postgresql' %}
+  db:
+    image: postgres:15-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: {{ project_name }}_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  {% elif features.database.engine == 'mysql' %}
+  db:
+    image: mysql:8.0
+    volumes:
+      - mysql_data:/var/lib/mysql
+    environment:
+      MYSQL_DATABASE: {{ project_name }}_db
+      MYSQL_ROOT_PASSWORD: mysql
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  {% endif %}
+
+  {% if features.performance.caching and features.performance.caching.backend == 'redis' %}
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  {% endif %}
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+      - static_volume:/app/static
+      - media_volume:/app/media
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE={{ project_name }}.settings.development
+      {% if features.database.engine == 'postgresql' %}
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/{{ project_name }}_db
+      {% elif features.database.engine == 'mysql' %}
+      - DATABASE_URL=mysql://root:mysql@db:3306/{{ project_name }}_db
+      {% endif %}
+      {% if features.performance.caching and features.performance.caching.backend == 'redis' %}
+      - REDIS_URL=redis://redis:6379/0
+      {% endif %}
+    depends_on:
+      {% if features.database.engine in ['postgresql', 'mysql'] %}
+      db:
+        condition: service_healthy
+      {% endif %}
+      {% if features.performance.caching and features.performance.caching.backend == 'redis' %}
+      redis:
+        condition: service_healthy
+      {% endif %}
+
+  {% if features.performance.celery %}
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A {{ project_name }} worker -l info
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE={{ project_name }}.settings.development
+      {% if features.database.engine == 'postgresql' %}
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/{{ project_name }}_db
+      {% elif features.database.engine == 'mysql' %}
+      - DATABASE_URL=mysql://root:mysql@db:3306/{{ project_name }}_db
+      {% endif %}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
+      - web
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A {{ project_name }} beat -l info
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE={{ project_name }}.settings.development
+      {% if features.database.engine == 'postgresql' %}
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/{{ project_name }}_db
+      {% elif features.database.engine == 'mysql' %}
+      - DATABASE_URL=mysql://root:mysql@db:3306/{{ project_name }}_db
+      {% endif %}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
+      - celery
+
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A {{ project_name }} flower
+    ports:
+      - "5555:5555"
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE={{ project_name }}.settings.development
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - redis
+      - celery
+  {% endif %}
+
+  {% if features.performance.elasticsearch %}
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+  {% endif %}
+
+  {% if features.deployment.monitoring %}
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"  # SMTP server
+      - "8025:8025"  # Web UI
+  {% endif %}
+
+volumes:
+  {% if features.database.engine == 'postgresql' %}
+  postgres_data:
+  {% elif features.database.engine == 'mysql' %}
+  mysql_data:
+  {% endif %}
+  {% if features.performance.caching and features.performance.caching.backend == 'redis' %}
+  redis_data:
+  {% endif %}
+  {% if features.performance.elasticsearch %}
+  elasticsearch_data:
+  {% endif %}
+  static_volume:
+  media_volume:

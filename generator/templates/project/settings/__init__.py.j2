@@ -1,0 +1,19 @@
+"""
+Settings module for {{ project_name }} project.
+
+This module determines which settings file to use based on the environment.
+"""
+
+import os
+
+# Determine which settings file to use
+environment = os.environ.get('DJANGO_ENV', 'development')
+
+if environment == 'production':
+    from .production import *
+elif environment == 'staging':
+    from .staging import *
+elif environment == 'testing':
+    from .testing import *
+else:
+    from .development import *

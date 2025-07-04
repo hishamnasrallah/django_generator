@@ -1,0 +1,44 @@
+"""
+Celery configuration for {{ project_name }} project.
+
+For more information on this file, see
+https://docs.celeryq.dev/en/stable/django/first-steps-with-django.html
+"""
+
+import os
+
+from celery import Celery
+from celery.schedules import crontab
+
+# Set the default Django settings module for the 'celery' program.
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', '{{ project_name }}.settings.production')
+
+app = Celery('{{ project_name }}')
+
+# Using a string here means the worker doesn't have to serialize
+# the configuration object to child processes.
+# - namespace='CELERY' means all celery-related configuration keys
+#   should have a `CELERY_` prefix.
+app.config_from_object('django.conf:settings', namespace='CELERY')
+
+# Load task modules from all registered Django apps.
+app.autodiscover_tasks()
+
+# Configure periodic tasks
+app.conf.beat_schedule = {
+    # Example periodic task - runs every day at midnight
+    'daily-cleanup': {
+        'task': '{{ project_name }}.tasks.daily_cleanup',
+        'schedule': crontab(hour=0, minute=0),
+    },
+    # Example periodic task - runs every hour
+    'hourly-stats': {
+        'task': '{{ project_name }}.tasks.calculate_stats',
+        'schedule': crontab(minute=0),
+    },
+}
+
+@app.task(bind=True, ignore_result=True)
+def debug_task(self):
+    """Debug task to test Celery setup."""
+    print(f'Request: {self.request!r}')

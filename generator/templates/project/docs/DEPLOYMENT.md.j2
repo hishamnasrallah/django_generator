@@ -1,0 +1,472 @@
+# {{ project_title }} Deployment Guide
+
+## Prerequisites
+
+Before deploying {{ project_title }}, ensure you have:
+
+- Python {{ python_version }} or higher
+- {{ features.database.engine | default('PostgreSQL') }} database
+{% if features.performance.caching %}
+- {{ features.performance.caching.backend }} for caching
+{% endif %}
+{% if features.performance.celery %}
+- {{ features.performance.caching.backend | default('Redis') }} for Celery broker
+{% endif %}
+{% if features.deployment.docker %}
+- Docker and Docker Compose
+{% endif %}
+{% if features.deployment.kubernetes %}
+- Kubernetes cluster (1.19+)
+- kubectl configured
+{% endif %}
+
+## Environment Configuration
+
+### Environment Variables
+
+Create a `.env` file based on `.env.example`:
+
+```bash
+# Django Settings
+DJANGO_SECRET_KEY=your-secure-secret-key
+DJANGO_DEBUG=False
+DJANGO_ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
+
+# Database
+DATABASE_URL={{ database_url }}
+{% if features.database.read_replica %}
+READ_REPLICA_URL=postgresql://user:pass@read-replica:5432/dbname
+{% endif %}
+
+{% if features.performance.caching %}
+# Cache
+CACHE_URL={{ features.performance.caching.backend }}://localhost:6379/1
+{% endif %}
+
+{% if features.performance.celery %}
+# Celery
+CELERY_BROKER_URL={{ features.performance.caching.backend | default('redis') }}://localhost:6379/0
+CELERY_RESULT_BACKEND={{ features.performance.caching.backend | default('redis') }}://localhost:6379/0
+{% endif %}
+
+{% if features.api %}
+# API Settings
+API_THROTTLE_RATE=10000/hour
+CORS_ALLOWED_ORIGINS=https://yourdomain.com
+{% endif %}
+
+{% if features.integrations %}
+# External Services
+{% if features.integrations.aws %}
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+AWS_STORAGE_BUCKET_NAME={{ project_name }}-media
+{% endif %}
+{% if features.integrations.sentry %}
+SENTRY_DSN=https://your-sentry-dsn@sentry.io/project-id
+{% endif %}
+{% endif %}
+Local Development
+Manual Setup
+
+Clone the repository
+bashgit clone <repository-url>
+cd {{ project_name }}
+
+Create virtual environment
+bashpython -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+Install dependencies
+bashpip install -r requirements/development.txt
+
+Configure environment
+bashcp .env.example .env
+# Edit .env with your configuration
+
+Run migrations
+bashpython manage.py migrate
+
+Create superuser
+bashpython manage.py createsuperuser
+
+Collect static files
+bashpython manage.py collectstatic --noinput
+
+Run development server
+bashpython manage.py runserver
+
+
+{% if features.deployment.docker %}
+Docker Development
+
+Build and start services
+bashdocker-compose up --build
+
+Run migrations
+bashdocker-compose exec web python manage.py migrate
+
+Create superuser
+bashdocker-compose exec web python manage.py createsuperuser
+
+
+Access the application at http://localhost:8000
+{% endif %}
+Production Deployment
+Pre-deployment Checklist
+
+ Set DEBUG = False
+ Configure ALLOWED_HOSTS
+ Set strong SECRET_KEY
+ Configure production database
+ Set up SSL/TLS certificates
+ Configure static file serving
+ Set up monitoring and logging
+ Configure backups
+ Review security settings
+ Test deployment process
+
+Traditional Server Deployment
+
+System dependencies
+bashsudo apt-get update
+sudo apt-get install -y python{{ python_version }} python{{ python_version }}-dev python3-pip
+sudo apt-get install -y {{ 'postgresql-client' if features.database.engine == 'postgresql' else 'mysql-client' if features.database.engine == 'mysql' else '' }}
+{% if features.performance.caching %}
+sudo apt-get install -y redis-server
+{% endif %}
+sudo apt-get install -y nginx supervisor
+
+Application setup
+bash# Create application user
+sudo useradd -m -s /bin/bash {{ project_name }}
+
+# Clone repository
+sudo -u {{ project_name }} git clone <repository-url> /home/{{ project_name }}/app
+cd /home/{{ project_name }}/app
+
+# Create virtual environment
+sudo -u {{ project_name }} python -m venv venv
+sudo -u {{ project_name }} ./venv/bin/pip install -r requirements/production.txt
+
+Configure Gunicorn
+bash# /etc/supervisor/conf.d/{{ project_name }}.conf
+[program:{{ project_name }}]
+command=/home/{{ project_name }}/app/venv/bin/gunicorn {{ project_name }}.wsgi:application --bind 127.0.0.1:8000
+directory=/home/{{ project_name }}/app
+user={{ project_name }}
+autostart=true
+autorestart=true
+redirect_stderr=true
+stdout_logfile=/var/log/{{ project_name }}/gunicorn.log
+environment="PATH=/home/{{ project_name }}/app/venv/bin"
+
+Configure Nginx
+nginx# /etc/nginx/sites-available/{{ project_name }}
+server {
+    listen 80;
+    server_name yourdomain.com www.yourdomain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /static/ {
+        alias /home/{{ project_name }}/app/staticfiles/;
+    }
+
+    location /media/ {
+        alias /home/{{ project_name }}/app/media/;
+    }
+}
+
+Start services
+bashsudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl start {{ project_name }}
+sudo nginx -s reload
+
+
+{% if features.deployment.docker %}
+Docker Production Deployment
+
+Build production image
+bashdocker build -t {{ project_name }}:latest .
+
+Run with Docker Compose
+bashdocker-compose -f docker-compose.prod.yml up -d
+
+Run migrations
+bashdocker-compose -f docker-compose.prod.yml exec web python manage.py migrate
+
+Collect static files
+bashdocker-compose -f docker-compose.prod.yml exec web python manage.py collectstatic --noinput
+
+
+{% endif %}
+{% if features.deployment.kubernetes %}
+Kubernetes Deployment
+
+Create namespace
+bashkubectl create namespace {{ project_name }}
+
+Create secrets
+bashkubectl create secret generic {{ project_name }}-secrets \
+  --from-env-file=.env \
+  -n {{ project_name }}
+
+Apply configurations
+bashkubectl apply -f k8s/ -n {{ project_name }}
+
+Check deployment status
+bashkubectl get pods -n {{ project_name }}
+kubectl get svc -n {{ project_name }}
+
+Run migrations
+bashkubectl exec -it deployment/{{ project_name }}-web -n {{ project_name }} -- python manage.py migrate
+
+
+Kubernetes Resources
+The deployment includes:
+
+Deployment: Web application pods
+Service: Load balancer for the application
+ConfigMap: Application configuration
+Secret: Sensitive configuration
+Ingress: External access configuration
+{% if features.performance.celery %}
+Deployment: Celery worker pods
+Deployment: Celery beat scheduler
+{% endif %}
+{% if features.database.engine == 'postgresql' %}
+StatefulSet: PostgreSQL database (optional)
+{% endif %}
+{% endif %}
+
+{% if features.performance.celery %}
+Celery Deployment
+Celery Worker
+bash# Supervisor configuration for Celery worker
+[program:{{ project_name }}-worker]
+command=/home/{{ project_name }}/app/venv/bin/celery -A {{ project_name }} worker -l info
+directory=/home/{{ project_name }}/app
+user={{ project_name }}
+numprocs=2
+autostart=true
+autorestart=true
+redirect_stderr=true
+stdout_logfile=/var/log/{{ project_name }}/celery-worker.log
+Celery Beat
+bash# Supervisor configuration for Celery beat
+[program:{{ project_name }}-beat]
+command=/home/{{ project_name }}/app/venv/bin/celery -A {{ project_name }} beat -l info
+directory=/home/{{ project_name }}/app
+user={{ project_name }}
+autostart=true
+autorestart=true
+redirect_stderr=true
+stdout_logfile=/var/log/{{ project_name }}/celery-beat.log
+{% endif %}
+SSL/TLS Configuration
+Using Let's Encrypt
+bash# Install Certbot
+sudo apt-get install certbot python3-certbot-nginx
+
+# Obtain certificate
+sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
+
+# Auto-renewal
+sudo certbot renew --dry-run
+Monitoring & Logging
+Application Monitoring
+{% if features.integrations and features.integrations.sentry %}
+
+Sentry Integration
+
+Set SENTRY_DSN in environment
+Errors automatically reported
+Performance monitoring enabled
+{% endif %}
+
+
+Health Checks
+
+Health endpoint: /health/
+Checks database, cache, and other services
+
+
+Prometheus Metrics
+{% if features.performance.monitoring %}
+
+Metrics endpoint: /metrics/
+Integrate with Prometheus/Grafana
+{% endif %}
+
+
+
+Log Management
+bash# Application logs
+/var/log/{{ project_name }}/app.log
+/var/log/{{ project_name }}/gunicorn.log
+{% if features.performance.celery %}
+/var/log/{{ project_name }}/celery-worker.log
+/var/log/{{ project_name }}/celery-beat.log
+{% endif %}
+
+# Nginx logs
+/var/log/nginx/access.log
+/var/log/nginx/error.log
+Backup Strategy
+Database Backup
+bash# PostgreSQL backup script
+#!/bin/bash
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+DATABASE_URL="{{ database_url }}"
+BACKUP_DIR="/backups/{{ project_name }}"
+
+pg_dump $DATABASE_URL > $BACKUP_DIR/backup_$TIMESTAMP.sql
+gzip $BACKUP_DIR/backup_$TIMESTAMP.sql
+
+# Keep only last 30 days
+find $BACKUP_DIR -name "*.gz" -mtime +30 -delete
+Media Files Backup
+bash# Sync media files to S3
+aws s3 sync /home/{{ project_name }}/app/media s3://{{ project_name }}-backups/media/
+Scaling Considerations
+Horizontal Scaling
+
+Web Application
+
+Add more Gunicorn workers
+Deploy multiple instances behind load balancer
+Use sticky sessions if needed
+
+
+Database
+{% if features.database.read_replica %}
+
+Configure read replicas
+Use database connection pooling
+{% endif %}
+Consider sharding for large datasets
+
+
+Caching
+{% if features.performance.caching %}
+
+Use Redis cluster for high availability
+Implement cache warming strategies
+{% endif %}
+
+
+
+Performance Optimization
+
+Enable Gzip compression
+Use CDN for static assets
+Optimize database queries
+Enable HTTP/2
+Implement browser caching headers
+
+Troubleshooting
+Common Issues
+
+Static files not loading
+bashpython manage.py collectstatic --noinput
+sudo nginx -s reload
+
+Database connection errors
+
+Check DATABASE_URL format
+Verify database server is running
+Check firewall rules
+
+
+Permission errors
+bashsudo chown -R {{ project_name }}:{{ project_name }} /home/{{ project_name }}/app
+sudo chmod -R 755 /home/{{ project_name }}/app/staticfiles
+sudo chmod -R 755 /home/{{ project_name }}/app/media
+
+
+Debug Mode
+For debugging production issues:
+bash# Temporarily enable debug mode
+export DJANGO_DEBUG=True
+python manage.py runserver 0.0.0.0:8000
+
+# Check logs
+tail -f /var/log/{{ project_name }}/*.log
+Rollback Procedure
+
+Tag current release
+bashgit tag -a v1.0.0 -m "Release version 1.0.0"
+git push origin v1.0.0
+
+Rollback steps
+bash# Stop application
+sudo supervisorctl stop {{ project_name }}
+
+# Checkout previous version
+git checkout v0.9.0
+
+# Install dependencies
+./venv/bin/pip install -r requirements/production.txt
+
+# Run migrations (if needed)
+./venv/bin/python manage.py migrate
+
+# Restart application
+sudo supervisorctl start {{ project_name }}
+
+
+Security Hardening
+
+Firewall configuration
+bashsudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
+
+Fail2ban configuration
+bashsudo apt-get install fail2ban
+# Configure for Django admin and API endpoints
+
+Regular updates
+bash# System updates
+sudo apt-get update && sudo apt-get upgrade
+
+# Python dependency updates
+pip list --outdated
+pip install --upgrade <package>
+
+
+Post-Deployment
+
+Verify deployment
+
+Check all endpoints are accessible
+Test critical user flows
+Monitor error rates
+Check performance metrics
+
+
+Configure monitoring alerts
+
+High error rate
+Low disk space
+High memory usage
+Database connection issues
+
+
+Document deployment
+
+Update deployment log
+Note any issues encountered
+Document configuration changes
+
+
+

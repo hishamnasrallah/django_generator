@@ -1,0 +1,110 @@
+name: {{ workflow_name }}
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * 1'  # Weekly on Monday
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '{{ python_version }}'
+
+      - name: Cache pip packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements/*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/base.txt
+          pip install safety bandit
+
+      - name: Run Bandit security linter
+        run: |
+          bandit -r {{ project_name }}/ apps/ -f json -o bandit-report.json
+
+      - name: Upload Bandit results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: bandit-results
+          path: bandit-report.json
+
+      - name: Check for known security vulnerabilities
+        run: |
+          safety check --json --output safety-report.json
+
+      - name: Upload Safety results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: safety-results
+          path: safety-report.json
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+        with:
+          languages: python
+
+    {% if features.deployment.docker %}
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '{{ project_name }}:latest'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+    {% endif %}
+
+      - name: OWASP ZAP Scan
+        uses: zaproxy/action-baseline@v0.9.0
+        with:
+          target: 'http://localhost:8000'
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a'
+
+      - name: Create security report
+        if: always()
+        run: |
+          echo "# Security Scan Report" > security-report.md
+          echo "## Bandit Results" >> security-report.md
+          if [ -f bandit-report.json ]; then
+            python -m json.tool bandit-report.json >> security-report.md
+          fi
+          echo "## Safety Results" >> security-report.md
+          if [ -f safety-report.json ]; then
+            python -m json.tool safety-report.json >> security-report.md
+          fi
+
+      - name: Comment PR with security results
+        uses: actions/github-script@v6
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('security-report.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            });

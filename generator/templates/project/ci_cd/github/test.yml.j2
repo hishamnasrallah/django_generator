@@ -1,0 +1,137 @@
+name: {{ workflow_name }}
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  PYTHON_VERSION: '{{ python_version }}'
+  DJANGO_SETTINGS_MODULE: '{{ project_name }}.settings.testing'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      {% if features.database.engine == 'postgresql' %}
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      {% elif features.database.engine == 'mysql' %}
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: mysql
+          MYSQL_DATABASE: test_db
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+        ports:
+          - 3306:3306
+      {% endif %}
+
+      {% if features.performance.caching and features.performance.caching.backend == 'redis' %}
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+      {% endif %}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements/*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+          {% if features.database.engine == 'postgresql' %}libpq-dev {% endif %}\
+          {% if features.database.engine == 'mysql' %}default-libmysqlclient-dev {% endif %}\
+          {% if 'ImageField' in models|map(attribute='fields')|map(attribute='type')|list %}libjpeg-dev zlib1g-dev {% endif %}\
+            gettext
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/testing.txt
+
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          SECRET_KEY=test-secret-key
+          DEBUG=False
+        {% if features.database.engine == 'postgresql' %}
+          DATABASE_URL=postgresql://postgres:postgres@localhost:5432/test_db
+        {% elif features.database.engine == 'mysql' %}
+          DATABASE_URL=mysql://root:mysql@localhost:3306/test_db
+        {% else %}
+          DATABASE_URL=sqlite:///test_db.sqlite3
+        {% endif %}
+        {% if features.performance.caching and features.performance.caching.backend == 'redis' %}
+          REDIS_URL=redis://localhost:6379/0
+        {% endif %}
+          EOF
+
+      - name: Run migrations
+        run: |
+          python manage.py migrate --noinput
+
+      - name: Run tests with coverage
+        run: |
+          coverage run --source='.' manage.py test
+          coverage xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: true
+
+      - name: Run linting
+        run: |
+          flake8 .
+          pylint {{ project_name }}/ apps/
+
+      - name: Run type checking
+        run: |
+          mypy {{ project_name }}/ apps/
+
+      - name: Check for security issues
+        run: |
+          bandit -r {{ project_name }}/ apps/
+          safety check
+
+      - name: Check Django deployment
+        run: |
+          python manage.py check --deploy

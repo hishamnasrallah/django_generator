@@ -1,0 +1,89 @@
+# Multi-stage build for {{ project_title }}
+# Stage 1: Build stage
+FROM python:{{ python_version }}-slim as builder
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+PYTHONUNBUFFERED=1 \
+PIP_NO_CACHE_DIR=1 \
+PIP_DISABLE_PIP_VERSION_CHECK=1 \
+DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+build-essential \
+{% if features.database.engine == 'postgresql' %}libpq-dev \
+{% elif features.database.engine == 'mysql' %}default-libmysqlclient-dev \
+{% endif %}{% if 'ImageField' in models|map(attribute='fields')|map(attribute='type')|list %}libjpeg-dev \
+    zlib1g-dev \
+    libpng-dev \
+{% endif %}git \
+&& rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy requirements
+COPY requirements/production.txt /tmp/requirements.txt
+
+# Install Python dependencies
+RUN pip install --upgrade pip setuptools wheel && \
+pip install -r /tmp/requirements.txt
+
+# Stage 2: Runtime stage
+FROM python:{{ python_version }}-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+PYTHONUNBUFFERED=1 \
+PATH="/opt/venv/bin:$PATH" \
+DJANGO_SETTINGS_MODULE="{{ project_name }}.settings.production"
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+{% if features.database.engine == 'postgresql' %}libpq5 \
+{% elif features.database.engine == 'mysql' %}default-mysql-client \
+{% endif %}{% if 'ImageField' in models|map(attribute='fields')|map(attribute='type')|list %}libjpeg62-turbo \
+    libpng16-16 \
+{% endif %}curl \
+&& rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r django && useradd -r -g django django
+
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
+
+# Create necessary directories
+RUN mkdir -p /app /app/static /app/media /app/logs && \
+chown -R django:django /app
+
+# Set working directory
+WORKDIR /app
+
+# Copy application code
+COPY --chown=django:django . .
+
+# Collect static files
+RUN python manage.py collectstatic --noinput
+
+# Switch to non-root user
+USER django
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+CMD curl -f http://localhost:8000/health/ || exit 1
+
+# Run the application
+CMD ["gunicorn", "{{ project_name }}.wsgi:application", \
+"--bind", "0.0.0.0:8000", \
+"--workers", "4", \
+"--threads", "4", \
+"--worker-class", "gthread", \
+"--worker-tmp-dir", "/dev/shm", \
+"--access-logfile", "-", \
+"--error-logfile", "-"]

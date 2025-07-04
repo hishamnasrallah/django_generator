@@ -1,0 +1,360 @@
+# Contributing to {{ project_title }}
+
+Thank you for your interest in contributing to {{ project_title }}! We welcome contributions from the community.
+
+## Code of Conduct
+
+By participating in this project, you agree to abide by our Code of Conduct:
+
+- Be respectful and inclusive
+- Welcome newcomers and help them get started
+- Focus on what is best for the community
+- Show empathy towards other community members
+
+## Getting Started
+
+### Prerequisites
+
+- Python {{ python_version }} or higher
+- Git
+- {{ features.database.engine | default('PostgreSQL') }}
+{% if features.performance.caching %}
+- {{ features.performance.caching.backend }}
+{% endif %}
+{% if features.deployment.docker %}
+- Docker and Docker Compose (optional)
+{% endif %}
+
+### Development Setup
+
+1. **Fork the repository**
+   - Click the "Fork" button on GitHub
+   - Clone your fork locally
+
+2. **Set up development environment**
+   ```bash
+   # Clone your fork
+   git clone https://github.com/YOUR_USERNAME/{{ project_name }}.git
+   cd {{ project_name }}
+
+   # Add upstream remote
+   git remote add upstream https://github.com/ORIGINAL_OWNER/{{ project_name }}.git
+
+   # Create virtual environment
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+   # Install development dependencies
+   pip install -r requirements/development.txt
+
+   # Install pre-commit hooks
+   pre-commit install
+
+Configure environment
+bashcp .env.example .env
+# Edit .env with your local configuration
+
+Set up database
+bash# Create database
+createdb {{ project_name }}_dev
+
+# Run migrations
+python manage.py migrate
+
+# Create superuser
+python manage.py createsuperuser
+
+# Load sample data (if available)
+python manage.py loaddata fixtures/sample_data.json
+
+
+Development Workflow
+1. Create a Feature Branch
+bash# Update main branch
+git checkout main
+git pull upstream main
+
+# Create feature branch
+git checkout -b feature/your-feature-name
+2. Make Your Changes
+
+Write clean, readable code
+Follow the project's coding standards
+Add tests for new functionality
+Update documentation as needed
+
+3. Code Style
+We use the following tools to maintain code quality:
+bash# Format code with Black
+black .
+
+# Sort imports with isort
+isort .
+
+# Check code style with flake8
+flake8
+
+# Type checking with mypy
+mypy {{ project_name }}/ apps/
+
+# Run all checks
+pre-commit run --all-files
+4. Testing
+bash# Run all tests
+pytest
+
+# Run specific test file
+pytest apps/app_name/tests/test_models.py
+
+# Run with coverage
+pytest --cov={{ project_name }} --cov=apps --cov-report=html
+
+# Run only fast tests
+pytest -m "not slow"
+
+# Run tests in parallel
+pytest -n auto
+5. Documentation
+
+Update docstrings for new functions/classes
+Update README.md if needed
+Add/update API documentation
+Include examples where appropriate
+
+Pull Request Process
+1. Before Submitting
+
+ All tests pass locally
+ Code follows style guidelines
+ Documentation is updated
+ Commit messages are clear and descriptive
+ Branch is up to date with main
+
+2. Commit Messages
+Follow conventional commit format:
+type(scope): subject
+
+body
+
+footer
+Types:
+
+feat: New feature
+fix: Bug fix
+docs: Documentation changes
+style: Code style changes (formatting, etc.)
+refactor: Code refactoring
+perf: Performance improvements
+test: Test additions or changes
+chore: Build process or auxiliary tool changes
+
+Example:
+feat(api): add pagination to user endpoint
+
+- Implement cursor-based pagination
+- Add page size configuration
+- Update API documentation
+
+Closes #123
+3. Submit Pull Request
+
+Push your branch to your fork
+bashgit push origin feature/your-feature-name
+
+Open a pull request on GitHub
+
+Use a clear, descriptive title
+Fill out the PR template
+Link related issues
+Request reviews from maintainers
+
+
+Address review feedback
+
+Make requested changes
+Push new commits to your branch
+Re-request review when ready
+
+
+
+4. After Merge
+bash# Clean up local branch
+git checkout main
+git pull upstream main
+git branch -d feature/your-feature-name
+
+# Clean up remote branch
+git push origin --delete feature/your-feature-name
+Types of Contributions
+Bug Reports
+
+Use the bug report template
+Include steps to reproduce
+Provide system information
+Include error messages/logs
+Add screenshots if applicable
+
+Feature Requests
+
+Use the feature request template
+Explain the use case
+Describe the desired behavior
+Consider implementation details
+Discuss alternatives
+
+Code Contributions
+
+Bug fixes
+New features
+Performance improvements
+Test improvements
+Documentation updates
+
+Non-Code Contributions
+
+Documentation improvements
+Translation help
+Design assets
+Bug triage
+Community support
+
+Development Guidelines
+Python Code Style
+python# Good
+def calculate_total(items: List[Item]) -> Decimal:
+    """
+    Calculate the total price of items.
+
+    Args:
+        items: List of items to calculate
+
+    Returns:
+        Total price as Decimal
+    """
+    return sum(item.price for item in items)
+
+# Bad
+def calc(i):
+    return sum([x.price for x in i])
+Django Best Practices
+
+Models
+
+Use appropriate field types
+Add db_index for frequently queried fields
+Include help_text for complex fields
+Override __str__ method
+
+
+Views
+
+Keep views thin, move logic to models/services
+Use class-based views when appropriate
+Handle exceptions gracefully
+Return appropriate HTTP status codes
+
+
+Templates
+
+Use template inheritance
+Keep logic minimal in templates
+Use template tags for reusable components
+
+
+API
+
+Use serializers for data validation
+Implement proper pagination
+Version your API
+Document all endpoints
+
+
+
+Testing Guidelines
+
+Unit Tests
+
+Test one thing at a time
+Use descriptive test names
+Follow AAA pattern (Arrange, Act, Assert)
+Mock external dependencies
+
+
+Integration Tests
+
+Test complete workflows
+Use factory_boy for test data
+Clean up after tests
+
+
+Test Coverage
+
+Aim for >80% coverage
+Focus on critical paths
+Don't test Django internals
+
+
+
+Example test:
+pythonimport pytest
+from apps.myapp.models import MyModel
+
+@pytest.mark.django_db
+class TestMyModel:
+    def test_str_representation(self):
+        # Arrange
+        obj = MyModel(name="Test Object")
+
+        # Act
+        result = str(obj)
+
+        # Assert
+        assert result == "Test Object"
+Project Structure
+{{ project_name }}/
+├── apps/                  # Django applications
+│   └── app_name/
+│       ├── tests/        # App-specific tests
+│       ├── models.py     # Data models
+│       ├── views.py      # View logic
+│       ├── serializers.py # API serializers
+│       └── urls.py       # URL patterns
+├── {{ project_name }}/            # Project configuration
+├── requirements/          # Dependency files
+├── tests/                 # Project-wide tests
+├── docs/                  # Documentation
+└── scripts/              # Utility scripts
+Release Process
+
+Version Bumping
+
+Update version in pyproject.toml
+Update CHANGELOG.md
+Create version tag
+
+
+Release Checklist
+
+ All tests pass
+ Documentation updated
+ CHANGELOG.md updated
+ Version bumped
+ Release notes written
+
+
+
+Getting Help
+
+Discord: [Join our Discord server](https://discord.gg/{{ project_name }})
+GitHub Issues: For bug reports and feature requests
+Documentation: [Read the docs](https://docs.{{ project_name }}.com)
+Email: dev@{{ project_name }}.com
+
+Recognition
+Contributors will be recognized in:
+
+CONTRIBUTORS.md file
+Release notes
+Project documentation
+
+Thank you for contributing to {{ project_title }}!

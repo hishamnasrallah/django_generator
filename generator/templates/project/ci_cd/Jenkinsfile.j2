@@ -1,0 +1,191 @@
+pipeline {
+agent any
+
+environment {
+PYTHON_VERSION = '{{ python_version }}'
+PROJECT_NAME = '{{ project_name }}'
+DOCKER_IMAGE = "${env.DOCKER_REGISTRY}/${env.PROJECT_NAME}"
+DJANGO_SETTINGS_MODULE = "${env.PROJECT_NAME}.settings.testing"
+}
+
+stages {
+stage('Checkout') {
+steps {
+checkout scm
+}
+}
+
+stage('Setup Python Environment') {
+steps {
+sh '''
+python${PYTHON_VERSION} -m venv venv
+. venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements/testing.txt
+'''
+}
+}
+
+stage('Lint') {
+parallel {
+stage('Flake8') {
+steps {
+sh '''
+. venv/bin/activate
+flake8 .
+'''
+}
+}
+stage('Black') {
+steps {
+sh '''
+. venv/bin/activate
+black --check .
+'''
+}
+}
+stage('isort') {
+steps {
+sh '''
+. venv/bin/activate
+isort --check-only .
+'''
+}
+}
+}
+}
+
+stage('Security Scan') {
+parallel {
+stage('Bandit') {
+steps {
+sh '''
+. venv/bin/activate
+bandit -r ${PROJECT_NAME}/ apps/ -f json -o bandit-report.json
+'''
+}
+}
+stage('Safety') {
+steps {
+sh '''
+. venv/bin/activate
+safety check --json --output safety-report.json
+'''
+}
+}
+}
+}
+
+stage('Test') {
+steps {
+sh '''
+. venv/bin/activate
+coverage run --source='.' manage.py test
+coverage xml
+coverage report
+'''
+}
+post {
+always {
+junit 'test-reports/*.xml'
+publishHTML([
+allowMissing: false,
+alwaysLinkToLastBuild: true,
+keepAll: true,
+reportDir: 'htmlcov',
+reportFiles: 'index.html',
+reportName: 'Coverage Report'
+])
+}
+}
+}
+
+stage('Build Docker Image') {
+when {
+branch 'main'
+}
+steps {
+script {
+docker.build("${DOCKER_IMAGE}:${env.BUILD_NUMBER}")
+docker.build("${DOCKER_IMAGE}:latest")
+}
+}
+}
+
+stage('Push to Registry') {
+when {
+branch 'main'
+}
+steps {
+script {
+docker.withRegistry("https://${env.DOCKER_REGISTRY}", 'docker-registry-credentials') {
+docker.image("${DOCKER_IMAGE}:${env.BUILD_NUMBER}").push()
+docker.image("${DOCKER_IMAGE}:latest").push()
+}
+}
+}
+}
+
+stage('Deploy to Staging') {
+when {
+branch 'develop'
+}
+steps {
+sshagent(['staging-ssh-credentials']) {
+sh '''
+ssh -o StrictHostKeyChecking=no ${STAGING_USER}@${STAGING_HOST} "
+cd /home/${PROJECT_NAME} &&
+docker-compose -f docker-compose.staging.yml pull &&
+docker-compose -f docker-compose.staging.yml up -d &&
+docker-compose -f docker-compose.staging.yml exec -T web python manage.py migrate --noinput &&
+docker-compose -f docker-compose.staging.yml exec -T web python manage.py collectstatic --noinput
+"
+'''
+}
+}
+}
+
+stage('Deploy to Production') {
+when {
+branch 'main'
+}
+input {
+message "Deploy to production?"
+ok "Deploy"
+}
+steps {
+sshagent(['production-ssh-credentials']) {
+sh '''
+ssh -o StrictHostKeyChecking=no ${PRODUCTION_USER}@${PRODUCTION_HOST} "
+cd /home/${PROJECT_NAME} &&
+docker-compose -f docker-compose.prod.yml pull &&
+docker-compose -f docker-compose.prod.yml up -d &&
+docker-compose -f docker-compose.prod.yml exec -T web python manage.py migrate --noinput &&
+docker-compose -f docker-compose.prod.yml exec -T web python manage.py collectstatic --noinput
+"
+'''
+}
+}
+}
+}
+
+post {
+always {
+cleanWs()
+}
+success {
+emailext (
+subject: "SUCCESS: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+body: "Good news! The build succeeded.",
+to: "${env.TEAM_EMAIL}"
+)
+}
+failure {
+emailext (
+subject: "FAILURE: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]'",
+body: "Bad news... The build failed. Check the console output at ${env.BUILD_URL}",
+to: "${env.TEAM_EMAIL}"
+)
+}
+}
+}
