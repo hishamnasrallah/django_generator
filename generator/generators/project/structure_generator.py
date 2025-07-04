@@ -28,6 +28,9 @@ class ProjectStructureGenerator(BaseGenerator):
     description = "Creates Django project structure"
     version = "1.0.0"
     order = 10  # Run first
+    category = "project"
+    provides = {'ProjectStructureGenerator', 'project_structure'}
+    tags = {'project', 'structure', 'base'}
 
     def can_generate(self, schema: Dict[str, Any]) -> bool:
         """This generator always runs for any valid schema."""
@@ -36,23 +39,29 @@ class ProjectStructureGenerator(BaseGenerator):
     def generate(self, schema: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> List[GeneratedFile]:
         """Generate project structure files."""
         self.generated_files = []
-        project = schema['project']
+        project = schema.get('project', {})
         features = schema.get('features', {})
+
+        # Validate project data
+        if not project or not project.get('name'):
+            raise ValueError("Project must have a 'name' field")
 
         # Generate project name variations
         project_name = project['name']
         project_title = NamingConventions().to_title_case(project_name)
 
-        # Build context
+        # Build context - ensure all nested dictionaries exist with safe defaults
         ctx = {
             'project': project,
             'project_name': project_name,
             'project_title': project_title,
-            'features': features,
+            'features': self._ensure_features_structure(features),
             'apps': schema.get('apps', []),
             'python_version': project.get('python_version', '3.11'),
             'django_version': project.get('django_version', '4.2'),
             'secret_key': self._generate_secret_key(),
+            'database_url': self._get_database_url(features.get('database', {}), project_name),
+            'redis_url': 'redis://localhost:6379/0',
         }
 
         # Generate files
@@ -63,16 +72,106 @@ class ProjectStructureGenerator(BaseGenerator):
         self._generate_static_directories(ctx)
 
         # Optional components based on features
-        if features.get('deployment', {}).get('docker'):
+        if ctx['features'].get('deployment', {}).get('docker'):
             self._generate_docker_files(ctx)
 
-        if features.get('deployment', {}).get('ci_cd'):
+        if ctx['features'].get('deployment', {}).get('ci_cd'):
             self._generate_ci_cd_files(ctx)
 
-        if features.get('docs', True):  # Default to including docs
+        if ctx['features'].get('docs', True):  # Default to including docs
             self._generate_documentation_structure(ctx)
 
         return self.generated_files
+
+    def _ensure_features_structure(self, features: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure all expected feature keys exist with proper defaults."""
+        default_features = {
+            'api': {
+                'rest_framework': False,
+                'graphql': False,
+                'websockets': False,
+                'versioning': None,
+            },
+            'authentication': {
+                'jwt': False,
+                'oauth2': {
+                    'enabled': False,
+                    'providers': []
+                },
+                'two_factor': False,
+                'api_keys': False,
+                'custom_user': False,
+            },
+            'database': {
+                'engine': 'postgresql',
+                'read_replica': False,
+            },
+            'performance': {
+                'caching': {
+                    'enabled': False,
+                    'backend': 'redis'
+                },
+                'celery': False,
+                'elasticsearch': False,
+                'monitoring': False,
+                'redis': False,
+            },
+            'deployment': {
+                'docker': False,
+                'kubernetes': False,
+                'ci_cd': None,
+                'hosting': None,
+                'monitoring': False,
+            },
+            'enterprise': {
+                'audit': False,
+                'soft_delete': False,
+                'multitenancy': False,
+                'versioning': False,
+            },
+            'integrations': {
+                'payment': None,
+                'email': None,
+                'sms': None,
+                'storage': None,
+                'aws': False,
+                'sentry': False,
+                'image_processing': False,
+            },
+            'testing': {
+                'e2e': False,
+            },
+            'build': {
+                'makefile': True,
+            },
+            'docs': True,
+        }
+
+        # Deep merge features with defaults
+        return self._deep_merge(default_features, features)
+
+    def _deep_merge(self, default: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+        """Deep merge two dictionaries."""
+        result = default.copy()
+
+        for key, value in override.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = self._deep_merge(result[key], value)
+            else:
+                result[key] = value
+
+        return result
+
+    def _get_database_url(self, db_config: Dict[str, Any], project_name: str) -> str:
+        """Generate appropriate database URL based on engine."""
+        engine = db_config.get('engine', 'postgresql')
+
+        if engine == 'postgresql':
+            return f'postgresql://postgres:password@localhost:5432/{project_name}_db'
+        elif engine == 'mysql':
+            return f'mysql://root:password@localhost:3306/{project_name}_db'
+        else:
+            return 'sqlite:///db.sqlite3'
 
     def _generate_root_files(self, ctx: Dict[str, Any]) -> None:
         """Generate root project files."""
@@ -105,8 +204,8 @@ class ProjectStructureGenerator(BaseGenerator):
             executable=True
         )
 
-        # Makefile
-        if ctx['features'].get('build', {}).get('makefile', True):
+        # Makefile - check feature safely
+        if ctx.get('features', {}).get('build', {}).get('makefile', True):
             self.create_file_from_template(
                 'project/root/Makefile.j2',
                 'Makefile',
@@ -127,6 +226,13 @@ class ProjectStructureGenerator(BaseGenerator):
             ctx
         )
 
+        # .pre-commit-config.yaml
+        self.create_file_from_template(
+            'project/root/pre-commit-config.yaml.j2',
+            '.pre-commit-config.yaml',
+            ctx
+        )
+
     def _generate_requirements(self, ctx: Dict[str, Any]) -> None:
         """Generate requirements files."""
         # Create requirements directory
@@ -139,9 +245,9 @@ class ProjectStructureGenerator(BaseGenerator):
             ctx
         )
 
-        # Development requirements
+        # Development requirements - fix the typo in template name
         self.create_file_from_template(
-            'project/requirements/development.txt.j2',
+            'project/requirements/development.txt.j2',  # Fixed from development.text.j2
             f'{reqs_dir}/development.txt',
             ctx
         )
